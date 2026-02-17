@@ -17,14 +17,34 @@
       transform: translate(-50%, -50%); pointer-events: none; color: #0f0;
       font-size: 24px; line-height: 20px; text-align: center; z-index: 50;
     }
+    #paste-button {
+      position: absolute; top: 10px; right: 10px; z-index: 50;
+      padding: 10px 20px; background: #007bff; color: white; border: none;
+      border-radius: 5px; cursor: pointer; display: none;
+    }
+    #paste-button:hover { background: #0056b3; }
+    #paste-modal {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(255,255,255,0.9); padding: 20px; border-radius: 10px;
+      width: 400px; z-index: 100; display: none; text-align: center;
+    }
+    #paste-textarea { width: 100%; height: 200px; margin-bottom: 10px; }
+    #submit-paste, #close-modal { padding: 8px 16px; margin: 5px; cursor: pointer; }
   </style>
 </head>
 <body>
 
-<div id="instructions">Click anywhere to enter<br><small>WASD = move • Mouse = look around • ESC = release mouse</small></div>
+<div id="instructions">Click anywhere to enter<br><small>WASD = move • Q/E = down/up • Mouse = look • ESC = release</small></div>
 <div id="crosshair">+</div>
+<button id="paste-button">Paste Excel Data</button>
+<div id="paste-modal">
+  <h3>Paste Excel Data (Tab-separated)</h3>
+  <p>Columns: Container #, Voyage, Discharge Port, Location (e.g. 9a), Group</p>
+  <textarea id="paste-textarea" placeholder="Paste here..."></textarea>
+  <button id="submit-paste">Submit</button>
+  <button id="close-modal">Close</button>
+</div>
 
-<!-- Import map goes BEFORE the type="module" script -->
 <script type="importmap">
 {
   "imports": {
@@ -40,30 +60,36 @@
   import { FontLoader } from 'three/addons/loaders/FontLoader.js';
   import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-  // ─── Scene setup ───────────────────────────────────────────────
+  // Scene setup
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x88aaff); // light blue sky
-  scene.fog = new THREE.FogExp2(0x88aaff, 0.0004);
+  scene.background = new THREE.Color(0x88aaff);
+  scene.fog = new THREE.FogExp2(0x88aaff, 0.0008); // denser fog for depth
 
   const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
-  camera.position.set(20, 1.7, 10); // eye height, positioned to see some of the grid
+  camera.position.set(20, 5, 10); // higher start to see plane
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(devicePixelRatio);
   document.body.appendChild(renderer.domElement);
 
-  // ─── Controls ──────────────────────────────────────────────────
+  // Controls
   const controls = new PointerLockControls(camera, document.body);
 
   const instructions = document.getElementById('instructions');
   instructions.addEventListener('click', () => controls.lock());
 
-  controls.addEventListener('lock',   () => instructions.classList.add('hidden'));
-  controls.addEventListener('unlock', () => instructions.classList.remove('hidden'));
+  controls.addEventListener('lock', () => {
+    instructions.classList.add('hidden');
+    document.getElementById('paste-button').style.display = 'block'; // show button on lock
+  });
+  controls.addEventListener('unlock', () => {
+    instructions.classList.remove('hidden');
+    document.getElementById('paste-button').style.display = 'none';
+  });
 
-  // Movement
-  const move = { forward: false, backward: false, left: false, right: false };
+  // Movement (now with up/down)
+  const move = { forward: false, backward: false, left: false, right: false, up: false, down: false };
   const velocity = new THREE.Vector3();
   const direction = new THREE.Vector3();
   let prevTime = performance.now();
@@ -74,6 +100,8 @@
       case 'KeyS': case 'ArrowDown':  move.backward = true; break;
       case 'KeyA': case 'ArrowLeft':  move.left     = true; break;
       case 'KeyD': case 'ArrowRight': move.right    = true; break;
+      case 'KeyE': move.up   = true; break;
+      case 'KeyQ': move.down = true; break;
     }
   });
 
@@ -83,67 +111,138 @@
       case 'KeyS': case 'ArrowDown':  move.backward = false; break;
       case 'KeyA': case 'ArrowLeft':  move.left     = false; break;
       case 'KeyD': case 'ArrowRight': move.right    = false; break;
+      case 'KeyE': move.up   = false; break;
+      case 'KeyQ': move.down = false; break;
     }
   });
 
-  // ─── Ground Grid ───────────────────────────────────────────────
+  // Ground plane (solid + grid lines)
   const cellSize = 20;
-  const cols = 31;              // 9 to 39 inclusive
-  const rows = 7;               // a to g
+  const cols = 31; // 9 to 39
+  const rows = 7;  // a to g
   const gridSizeX = cols * cellSize;
   const gridSizeZ = rows * cellSize;
 
-  const grid = new THREE.GridHelper(gridSizeX, cols, 0x444466, 0x88aaff);
+  // Solid plane
+  const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
+  const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
+  const plane = new THREE.Mesh(planeGeo, planeMat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.y = -0.01; // slightly below grid
+  scene.add(plane);
+
+  // Grid lines (thicker)
+  const grid = new THREE.GridHelper(gridSizeX, cols, 0x444466, 0xaaccff);
+  grid.material.linewidth = 2; // thicker lines
   grid.position.y = 0;
   scene.add(grid);
 
-  // ─── Labels (now using imported classes) ───────────────────────
+  // Labels
   const loader = new FontLoader();
   loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-
     const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // Numbers 9–39 along the near side (-Z edge)
+    // Numbers 9–39
     for (let i = 0; i < cols; i++) {
       const num = 9 + i;
-      const textGeo = new TextGeometry(num.toString(), {
-        font, size: 3, depth: 0.2, curveSegments: 4
-      });
+      const textGeo = new TextGeometry(num.toString(), { font, size: 3, depth: 0.2, curveSegments: 4 });
       const mesh = new THREE.Mesh(textGeo, textMat);
       mesh.position.set( -gridSizeX/2 + (i + 0.5)*cellSize, 0.1, -gridSizeZ/2 - 8 );
       mesh.rotation.x = -Math.PI / 2;
       scene.add(mesh);
     }
 
-    // Letters a–g along the left side (-X edge)
-    const letters = 'abcdefg'.split('');
+    // Letters a–g (uppercase)
+    const letters = 'ABCDEFG'.split('');
     for (let i = 0; i < rows; i++) {
-      const textGeo = new TextGeometry(letters[i].toUpperCase(), {  // uppercase for visibility
-        font, size: 5, depth: 0.3, curveSegments: 4
-      });
+      const textGeo = new TextGeometry(letters[i], { font, size: 5, depth: 0.3, curveSegments: 4 });
       const mesh = new THREE.Mesh(textGeo, textMat);
       mesh.position.set( -gridSizeX/2 - 12, 0.1, -gridSizeZ/2 + (i + 0.5)*cellSize );
       mesh.rotation.x = -Math.PI / 2;
       scene.add(mesh);
     }
 
-    // Big title in the sky
-    const titleGeo = new TextGeometry("Y BLOCK", {
-      font, size: 12, depth: 1, curveSegments: 6
-    });
+    // Title
+    const titleGeo = new TextGeometry("Y BLOCK", { font, size: 12, depth: 1, curveSegments: 6 });
     const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
     title.position.set(0, 15, -gridSizeZ/2 - 30);
     title.rotation.x = -Math.PI / 2;
     scene.add(title);
   });
 
-  // ─── Lights (should make everything visible) ───────────────────
+  // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 1.2));
   const sun = new THREE.DirectionalLight(0xffffe0, 1.5);
   sun.position.set(100, 200, 80);
   scene.add(sun);
 
-  // ─── Animate loop ──────────────────────────────────────────────
+  // Containers array (for stacking)
+  const containers = new Map(); // key: 'row-col' e.g. '9-a'
+
+  // Paste modal handling
+  const pasteButton = document.getElementById('paste-button');
+  const pasteModal = document.getElementById('paste-modal');
+  const pasteTextarea = document.getElementById('paste-textarea');
+  const submitPaste = document.getElementById('submit-paste');
+  const closeModal = document.getElementById('close-modal');
+
+  pasteButton.addEventListener('click', () => { pasteModal.style.display = 'block'; });
+  closeModal.addEventListener('click', () => { pasteModal.style.display = 'none'; });
+
+  submitPaste.addEventListener('click', () => {
+    const data = pasteTextarea.value.trim();
+    if (!data) return;
+
+    const lines = data.split('\n');
+    const headers = lines[0].split('\t'); // assume first line might be headers
+    const start = (headers[0].toLowerCase().includes('container')) ? 1 : 0; // skip headers if present
+
+    for (let i = start; i < lines.length; i++) {
+      const [containerNum, voyage, dischargePort, location, group] = lines[i].split('\t');
+      if (!location) continue;
+
+      // Parse location e.g. "9a" -> col=0 (9-9=0), row=0 (a=0)
+      const match = location.match(/^(\d+)([a-g])$/i);
+      if (!match) { console.error(`Invalid location: ${location}`); continue; }
+      const num = parseInt(match[1]) - 9; // 9=0, 10=1, ...,39=30
+      const letIdx = 'abcdefg'.indexOf(match[2].toLowerCase());
+      if (num < 0 || num >= cols || letIdx < 0) { console.error(`Out of bounds: ${location}`); continue; }
+
+      // Position: center of cell
+      const x = -gridSizeX/2 + (num + 0.5) * cellSize;
+      const z = -gridSizeZ/2 + (letIdx + 0.5) * cellSize;
+
+      // Stack if multiple in same spot
+      const key = `${num}-${letIdx}`;
+      const stack = containers.get(key) || [];
+      const y = stack.length * 8; // 8ft height per container
+
+      // Container box
+      const contGeo = new THREE.BoxGeometry(20, 8, 8); // 20ft long, 8ft wide/high approx
+      const color = group ? parseInt(group.replace(/\D/g,'')) % 0xffffff : 0xaaaaaa; // hash group to color
+      const contMat = new THREE.MeshStandardMaterial({ color });
+      const contMesh = new THREE.Mesh(contGeo, contMat);
+      contMesh.position.set(x, y + 4, z); // center y
+      scene.add(contMesh);
+
+      // Label above
+      loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+        const labelGeo = new TextGeometry(`${containerNum} - ${voyage}`, { font, size: 1.5, depth: 0.1 });
+        const labelMesh = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        labelMesh.position.set(x - 8, y + 9, z);
+        labelMesh.rotation.y = Math.PI / 2; // face side
+        scene.add(labelMesh);
+      });
+
+      stack.push(contMesh);
+      containers.set(key, stack);
+    }
+
+    pasteModal.style.display = 'none';
+    pasteTextarea.value = ''; // clear
+  });
+
+  // Animate
   function animate() {
     requestAnimationFrame(animate);
 
@@ -152,19 +251,23 @@
       const delta = (time - prevTime) / 1000;
 
       velocity.x -= velocity.x * 8.0 * delta;
+      velocity.y -= velocity.y * 8.0 * delta;
       velocity.z -= velocity.z * 8.0 * delta;
 
       direction.z = Number(move.forward) - Number(move.backward);
       direction.x = Number(move.right)   - Number(move.left);
+      direction.y = Number(move.up)      - Number(move.down);
       direction.normalize();
 
       const speed = 120.0;
 
       if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
       if (move.left    || move.right)    velocity.x -= direction.x * speed * delta;
+      if (move.up      || move.down)     velocity.y += direction.y * speed * delta; // +y up
 
-      controls.moveRight(  - velocity.x * delta);
-      controls.moveForward(- velocity.z * delta);
+      controls.moveRight(-velocity.x * delta);
+      controls.getObject().position.y += velocity.y * delta; // direct y move
+      controls.moveForward(-velocity.z * delta);
 
       prevTime = time;
     }
@@ -173,7 +276,7 @@
   }
   animate();
 
-  // Resize handler
+  // Resize
   window.addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
