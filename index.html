@@ -37,31 +37,32 @@
 <script type="module">
   import * as THREE from 'three';
   import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+  import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+  import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-  // ─── Everything from here down stays THE SAME as your current code ───
-  // Scene setup
+  // ─── Scene setup ───────────────────────────────────────────────
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x88aaff);
+  scene.background = new THREE.Color(0x88aaff); // light blue sky
   scene.fog = new THREE.FogExp2(0x88aaff, 0.0004);
 
   const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
-  camera.position.set(20, 1.7, 10);
+  camera.position.set(20, 1.7, 10); // eye height, positioned to see some of the grid
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(devicePixelRatio);
   document.body.appendChild(renderer.domElement);
 
-  // Controls
+  // ─── Controls ──────────────────────────────────────────────────
   const controls = new PointerLockControls(camera, document.body);
 
   const instructions = document.getElementById('instructions');
   instructions.addEventListener('click', () => controls.lock());
 
-  controls.addEventListener('lock', () => instructions.classList.add('hidden'));
+  controls.addEventListener('lock',   () => instructions.classList.add('hidden'));
   controls.addEventListener('unlock', () => instructions.classList.remove('hidden'));
 
-  // Movement vars
+  // Movement
   const move = { forward: false, backward: false, left: false, right: false };
   const velocity = new THREE.Vector3();
   const direction = new THREE.Vector3();
@@ -85,10 +86,10 @@
     }
   });
 
-  // Ground grid
+  // ─── Ground Grid ───────────────────────────────────────────────
   const cellSize = 20;
-  const cols = 31; // 9 to 39
-  const rows = 7;  // a to g
+  const cols = 31;              // 9 to 39 inclusive
+  const rows = 7;               // a to g
   const gridSizeX = cols * cellSize;
   const gridSizeZ = rows * cellSize;
 
@@ -96,16 +97,17 @@
   grid.position.y = 0;
   scene.add(grid);
 
-  // Labels (font loader)
-  const loader = new THREE.FontLoader();
+  // ─── Labels (now using imported classes) ───────────────────────
+  const loader = new FontLoader();
   loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+
     const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // Numbers along X (one side)
+    // Numbers 9–39 along the near side (-Z edge)
     for (let i = 0; i < cols; i++) {
       const num = 9 + i;
-      const textGeo = new THREE.TextGeometry(num.toString(), {
-        font, size: 3, height: 0.2, curveSegments: 4
+      const textGeo = new TextGeometry(num.toString(), {
+        font, size: 3, depth: 0.2, curveSegments: 4
       });
       const mesh = new THREE.Mesh(textGeo, textMat);
       mesh.position.set( -gridSizeX/2 + (i + 0.5)*cellSize, 0.1, -gridSizeZ/2 - 8 );
@@ -113,11 +115,11 @@
       scene.add(mesh);
     }
 
-    // Letters along Z
+    // Letters a–g along the left side (-X edge)
     const letters = 'abcdefg'.split('');
     for (let i = 0; i < rows; i++) {
-      const textGeo = new THREE.TextGeometry(letters[i], {
-        font, size: 5, height: 0.3, curveSegments: 4
+      const textGeo = new TextGeometry(letters[i].toUpperCase(), {  // uppercase for visibility
+        font, size: 5, depth: 0.3, curveSegments: 4
       });
       const mesh = new THREE.Mesh(textGeo, textMat);
       mesh.position.set( -gridSizeX/2 - 12, 0.1, -gridSizeZ/2 + (i + 0.5)*cellSize );
@@ -125,9 +127,9 @@
       scene.add(mesh);
     }
 
-    // Title
-    const titleGeo = new THREE.TextGeometry("Y BLOCK", {
-      font, size: 12, height: 1, curveSegments: 6
+    // Big title in the sky
+    const titleGeo = new TextGeometry("Y BLOCK", {
+      font, size: 12, depth: 1, curveSegments: 6
     });
     const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
     title.position.set(0, 15, -gridSizeZ/2 - 30);
@@ -135,13 +137,13 @@
     scene.add(title);
   });
 
-  // Lights
+  // ─── Lights (should make everything visible) ───────────────────
   scene.add(new THREE.AmbientLight(0xffffff, 1.2));
   const sun = new THREE.DirectionalLight(0xffffe0, 1.5);
   sun.position.set(100, 200, 80);
   scene.add(sun);
 
-  // Animate
+  // ─── Animate loop ──────────────────────────────────────────────
   function animate() {
     requestAnimationFrame(animate);
 
@@ -153,16 +155,16 @@
       velocity.z -= velocity.z * 8.0 * delta;
 
       direction.z = Number(move.forward) - Number(move.backward);
-      direction.x = Number(move.right) - Number(move.left);
+      direction.x = Number(move.right)   - Number(move.left);
       direction.normalize();
 
       const speed = 120.0;
 
       if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
-      if (move.left || move.right) velocity.x -= direction.x * speed * delta;
+      if (move.left    || move.right)    velocity.x -= direction.x * speed * delta;
 
-      controls.moveRight(-velocity.x * delta);
-      controls.moveForward(-velocity.z * delta);
+      controls.moveRight(  - velocity.x * delta);
+      controls.moveForward(- velocity.z * delta);
 
       prevTime = time;
     }
@@ -171,7 +173,7 @@
   }
   animate();
 
-  // Resize
+  // Resize handler
   window.addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
