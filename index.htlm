@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Y Block – 3D Viewport</title>
+  <style>
+    body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
+    #instructions {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      color: white; background: rgba(0,0,0,0.7); padding: 20px 40px; border-radius: 12px;
+      text-align: center; cursor: pointer; user-select: none; z-index: 100;
+    }
+    #instructions.hidden { display: none; }
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+      transform: translate(-50%, -50%); pointer-events: none; color: #0f0;
+      font-size: 24px; line-height: 20px; text-align: center; z-index: 50;
+    }
+  </style>
+</head>
+<body>
+
+<div id="instructions">Click anywhere to enter<br><small>WASD = move • Mouse = look around • ESC = release mouse</small></div>
+<div id="crosshair">+</div>
+
+<script type="module">
+  import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
+  import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/controls/PointerLockControls.js';
+
+  // ─── Scene setup ───────────────────────────────────────────────
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x88aaff); // sky-ish
+  scene.fog = new THREE.FogExp2(0x88aaff, 0.0004);
+
+  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 2000);
+  camera.position.set(20, 1.7, 10); // start somewhere sensible
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(devicePixelRatio);
+  document.body.appendChild(renderer.domElement);
+
+  // ─── Controls (WASD + mouse look) ──────────────────────────────
+  const controls = new PointerLockControls(camera, document.body);
+
+  const instructions = document.getElementById('instructions');
+  instructions.addEventListener('click', () => controls.lock());
+
+  controls.addEventListener('lock',   () => instructions.classList.add('hidden'));
+  controls.addEventListener('unlock', () => instructions.classList.remove('hidden'));
+
+  // Movement
+  const move = { forward: false, backward: false, left: false, right: false };
+  const velocity = new THREE.Vector3();
+  const direction = new THREE.Vector3();
+  let prevTime = performance.now();
+
+  document.addEventListener('keydown', e => {
+    switch (e.code) {
+      case 'KeyW': case 'ArrowUp':    move.forward  = true; break;
+      case 'KeyS': case 'ArrowDown':  move.backward = true; break;
+      case 'KeyA': case 'ArrowLeft':  move.left     = true; break;
+      case 'KeyD': case 'ArrowRight': move.right    = true; break;
+    }
+  });
+
+  document.addEventListener('keyup', e => {
+    switch (e.code) {
+      case 'KeyW': case 'ArrowUp':    move.forward  = false; break;
+      case 'KeyS': case 'ArrowDown':  move.backward = true; break;
+      case 'KeyA': case 'ArrowLeft':  move.left     = false; break;
+      case 'KeyD': case 'ArrowRight': move.right    = false; break;
+    }
+  });
+
+  // ─── Ground ────────────────────────────────────────────────────
+  const cellSize = 20;          // 20 ft per cell
+  const cols = 31;              // 9 to 39 inclusive
+  const rows = 7;               // a to g
+  const gridSizeX = cols * cellSize;
+  const gridSizeZ = rows * cellSize;
+
+  const grid = new THREE.GridHelper(gridSizeX, cols, 0x444466, 0x88aaff);
+  grid.position.y = 0;
+  scene.add(grid);
+
+  // ─── Labels ────────────────────────────────────────────────────
+  const loader = new THREE.FontLoader();
+  loader.load('https://cdn.jsdelivr.net/npm/three@0.169.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+
+    const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    // Numbers 9–39 along +X edge (left side if looking from -Z)
+    for (let i = 0; i < cols; i++) {
+      const num = 9 + i;
+      const textGeo = new THREE.TextGeometry(num.toString(), {
+        font, size: 3, height: 0.2, curveSegments: 4
+      });
+      const mesh = new THREE.Mesh(textGeo, textMat);
+      mesh.position.set( -gridSizeX/2 + (i + 0.5)*cellSize, 0.1, -gridSizeZ/2 - 8 );
+      mesh.rotation.x = -Math.PI / 2;
+      scene.add(mesh);
+    }
+
+    // Letters a–g along +Z edge (bottom side)
+    const letters = 'abcdefg'.split('');
+    for (let i = 0; i < rows; i++) {
+      const textGeo = new THREE.TextGeometry(letters[i], {
+        font, size: 5, height: 0.3, curveSegments: 4
+      });
+      const mesh = new THREE.Mesh(textGeo, textMat);
+      mesh.position.set( -gridSizeX/2 - 12, 0.1, -gridSizeZ/2 + (i + 0.5)*cellSize );
+      mesh.rotation.x = -Math.PI / 2;
+      scene.add(mesh);
+    }
+
+    // Big title
+    const titleGeo = new THREE.TextGeometry("Y BLOCK", {
+      font, size: 12, height: 1, curveSegments: 6
+    });
+    const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
+    title.position.set(0, 15, -gridSizeZ/2 - 30);
+    title.rotation.x = -Math.PI / 2;
+    scene.add(title);
+  });
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+  const sun = new THREE.DirectionalLight(0xffffe0, 1.5);
+  sun.position.set(100, 200, 80);
+  scene.add(sun);
+
+  // ─── Animate ───────────────────────────────────────────────────
+  function animate() {
+    requestAnimationFrame(animate);
+
+    if (controls.isLocked) {
+      const time = performance.now();
+      const delta = (time - prevTime) / 1000;
+
+      velocity.x -= velocity.x * 8.0 * delta;
+      velocity.z -= velocity.z * 8.0 * delta;
+
+      direction.z = Number(move.forward) - Number(move.backward);
+      direction.x = Number(move.right)   - Number(move.left);
+      direction.normalize();
+
+      const speed = 120.0; // units/second (~ quite fast for large scale)
+
+      if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
+      if (move.left    || move.right)    velocity.x -= direction.x * speed * delta;
+
+      controls.moveRight(  - velocity.x * delta);
+      controls.moveForward(- velocity.z * delta);
+
+      prevTime = time;
+    }
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // Resize
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+</script>
+</body>
+</html>
