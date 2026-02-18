@@ -45,7 +45,7 @@
 
 <div id="paste-modal">
   <h3>Paste Excel Data (Tab-separated from Excel)</h3>
-  <p>Expected columns: Container number, Voyage, Discharge port, Location (e.g. Y_39G 2), Group (size/type)</p>
+  <p>Expected columns: Container number, Voyage, Discharge port, Location (e.g. Y_39G 2), Group (20 or 40)</p>
   <textarea id="paste-textarea" placeholder="Paste copied rows here..."></textarea>
   <div>
     <button id="submit-paste">Submit & Place Containers</button>
@@ -74,7 +74,7 @@
   scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
 
   const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 3000);
-  camera.position.set(100, 10, 50); // adjusted for wider/shallower grid
+  camera.position.set(100, 10, 50);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
@@ -126,7 +126,7 @@
 
   // ─── Ground (rectangular: 40 ft wide × 10 ft deep) ─────────────
   const cellWidth  = 40;   // X – numbers/columns
-  const cellDepth  = 10;   // Z – letters/rows (halved)
+  const cellDepth  = 10;   // Z – letters/rows
   const cols = 31;         // 9 to 39
   const rows = 7;          // A to G
   const gridSizeX = cols * cellWidth;
@@ -151,7 +151,7 @@
   loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
     const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // Numbers 9–39 along X (wider spacing)
+    // Numbers 9–39
     for (let i = 0; i < cols; i++) {
       const num = 9 + i;
       const textGeo = new TextGeometry(num.toString(), { font, size: 5, depth: 0.4, curveSegments: 4 });
@@ -161,7 +161,7 @@
       scene.add(mesh);
     }
 
-    // Letters A–G along Z (shallower spacing)
+    // Letters A–G
     const letters = 'ABCDEFG'.split('');
     for (let i = 0; i < rows; i++) {
       const textGeo = new TextGeometry(letters[i], { font, size: 7, depth: 0.5, curveSegments: 4 });
@@ -185,7 +185,7 @@
   sun.position.set(200, 400, 150);
   scene.add(sun);
 
-  // Containers tracking: key = 'col-row'
+  // Containers tracking: key = 'num-letIdx'
   const containers = new Map();
 
   // Paste modal
@@ -211,18 +211,15 @@
       if (cols.length < 4) continue;
       const [containerNum, voyage, dischargePort, locationRaw, group = ''] = cols;
 
-      // Parse location like "Y_39G 2" or "Y_9A 1"
+      // Parse location "Y_39G 2"
       const locMatch = locationRaw.match(/Y_?(\d+)([A-Ga-g])\s*(\d+)/i);
-      if (!locMatch) {
-        console.warn(`Invalid location format: ${locationRaw}`);
-        continue;
-      }
+      if (!locMatch) { console.warn(`Invalid location: ${locationRaw}`); continue; }
       const num = parseInt(locMatch[1]) - 9;
       const letIdx = 'abcdefg'.indexOf(locMatch[2].toLowerCase());
       const stackHeight = parseInt(locMatch[3]) || 1;
 
       if (num < 0 || num >= cols || letIdx < 0 || stackHeight < 1) {
-        console.warn(`Out of bounds or invalid: ${locationRaw}`);
+        console.warn(`Invalid/out of bounds: ${locationRaw}`);
         continue;
       }
 
@@ -230,30 +227,33 @@
       const z = -gridSizeZ/2 + (letIdx + 0.5) * cellDepth;
       const key = `${num}-${letIdx}`;
 
-      const stack = containers.get(key) || [];
-      // Use requested stack height – but clamp to avoid overlap issues; place at bottom + offset
-      const yBase = (stackHeight - 1) * 8.5; // each container 8.5 ft high
-
-      // Container dimensions based on group/size
+      // Container size from group (20 or 40 ft long, 10 ft wide)
       let contLength = 20;
       if (group.toLowerCase().includes('40') || group === '40') contLength = 40;
+      const contWidth = 10; // as specified
+      const contHeight = 8.5;
 
-      const contGeo = new THREE.BoxGeometry(contLength, 8.5, 8);
+      // Y position based on stack height (no auto-stacking; use parsed height)
+      const yBase = (stackHeight - 1) * contHeight;
+
+      const contGeo = new THREE.BoxGeometry(contLength, contHeight, contWidth);
       const color = group ? (group.split('').reduce((a,c)=>a+c.charCodeAt(0),0) % 0xffffff) : 0xaaaaaa;
       const contMat = new THREE.MeshStandardMaterial({ color });
       const contMesh = new THREE.Mesh(contGeo, contMat);
-      contMesh.position.set(x, yBase + 4.25, z); // centered vertically
+      contMesh.position.set(x, yBase + contHeight/2, z);
       scene.add(contMesh);
 
-      // Label
+      // Label on top
       loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
         const labelGeo = new TextGeometry(`${containerNum} (${group})`, { font, size: 2.2, depth: 0.2 });
         const label = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ color: 0x000000 }));
-        label.position.set(x - contLength/2 + 1, yBase + 9, z + 4);
+        label.position.set(x - contLength/2 + 1, yBase + contHeight + 1, z + contWidth/2 - 1);
         label.rotation.y = Math.PI / 2;
         scene.add(label);
       });
 
+      // Track (for potential future clear)
+      const stack = containers.get(key) || [];
       stack.push(contMesh);
       containers.set(key, stack);
     }
@@ -279,7 +279,7 @@
       direction.y = Number(move.up)      - Number(move.down);
       direction.normalize();
 
-      const speed = 160.0; // slightly faster for larger area
+      const speed = 160.0;
 
       if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
       if (move.left    || move.right)    velocity.x -= direction.x * speed * delta;
