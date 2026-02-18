@@ -45,7 +45,7 @@
 
 <div id="paste-modal">
   <h3>Paste Excel Data (Tab-separated from Excel)</h3>
-  <p>Expected columns: Container number, Voyage, Discharge port, Location (e.g. Y_39G 2), Group (20 or 40)</p>
+  <p>Expected columns: Container number, Voyage, Discharge port, Location (e.g. Y 39G 2), Group (20 or 40)</p>
   <textarea id="paste-textarea" placeholder="Paste copied rows here..."></textarea>
   <div>
     <button id="submit-paste">Submit & Place Containers</button>
@@ -71,10 +71,10 @@
   // ─── Scene setup ───────────────────────────────────────────────
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x88aaff);
-  scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
+  scene.fog = new THREE.FogExp2(0x88aaff, 0.0006); // slightly less dense for better visibility
 
   const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 3000);
-  camera.position.set(80, 10, 35);
+  camera.position.set(80, 10, 35); // adjusted for better overview
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
@@ -124,81 +124,63 @@
     }
   });
 
-  // ─── Ground (rectangular: 40 ft wide × 10 ft deep) ─────────────
-const oddCols = [];
-for (let n = 9; n <= 39; n += 2) oddCols.push(n);
-const numOddCols = oddCols.length;  // 16
-const rows = 7;
+  // ─── Ground (only odd columns: 9,11,...,39 → 16 cells wide) ────
+  const oddCols = [];
+  for (let n = 9; n <= 39; n += 2) oddCols.push(n);
+  const numOddCols = oddCols.length; // 16
+  const rows = 7; // A to G
+  const cellWidth = 40; // X – numbers/columns
+  const cellDepth = 10; // Z – letters/rows
+  const gridSizeX = numOddCols * cellWidth;
+  const gridSizeZ = rows * cellDepth;
 
-const cellWidth  = 40;   // X – wider for containers
-const cellDepth  = 10;   // Z – letters/rows
-const gridSizeX = numOddCols * cellWidth;
-const gridSizeZ = 7 * cellDepth;  // still 7 rows A-G
+  // Solid plane
+  const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
+  const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
+  const plane = new THREE.Mesh(planeGeo, planeMat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.y = -0.01;
+  scene.add(plane);
 
-// Solid plane – only covering the active area
-const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
-const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
-const plane = new THREE.Mesh(planeGeo, planeMat);
-plane.rotation.x = -Math.PI / 2;
-plane.position.y = -0.01;
-scene.add(plane);
-
-// Grid lines – only for the 16 columns
-const grid = new THREE.GridHelper(gridSizeX, numOddCols, 0x444466, 0xaaccff);
-grid.material.linewidth = 2;
-grid.position.y = 0;
-scene.add(grid);
+  // Grid lines
+  const grid = new THREE.GridHelper(gridSizeX, numOddCols, 0x444466, 0xaaccff);
+  grid.material.linewidth = 2;
+  grid.position.y = 0;
+  scene.add(grid);
 
   // ─── Labels ────────────────────────────────────────────────────
   const loader = new FontLoader();
   loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-  const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-  // Numbers: only the odd ones, centered
-  oddCols.forEach((num, index) => {
-    const textGeo = new TextGeometry(num.toString(), {
-      font,
-      size: 6,
-      depth: 0.5,
-      curveSegments: 4
+    // Numbers: only odd, centered over cells
+    oddCols.forEach((num, index) => {
+      const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5, curveSegments: 4 });
+      const mesh = new THREE.Mesh(textGeo, textMat);
+      const cellCenterX = -gridSizeX / 2 + (index + 0.5) * cellWidth;
+      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 25); // further back
+      mesh.rotation.x = -Math.PI / 2;
+      scene.add(mesh);
     });
-    const mesh = new THREE.Mesh(textGeo, textMat);
 
-    const cellCenterX = -gridSizeX / 2 + (index + 0.5) * cellWidth;
-    mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 20);
-    mesh.rotation.x = -Math.PI / 2;
-    scene.add(mesh);
+    // Letters A–G: centered over rows
+    const letters = 'ABCDEFG'.split('');
+    for (let i = 0; i < rows; i++) {
+      const textGeo = new TextGeometry(letters[i], { font, size: 8, depth: 0.6, curveSegments: 4 });
+      const mesh = new THREE.Mesh(textGeo, textMat);
+      const cellCenterZ = -gridSizeZ / 2 + (i + 0.5) * cellDepth;
+      mesh.position.set(-gridSizeX / 2 - 40, 0.2, cellCenterZ); // further left
+      mesh.rotation.x = -Math.PI / 2;
+      scene.add(mesh);
+    }
+
+    // Title
+    const titleGeo = new TextGeometry("Y BLOCK", { font, size: 18, depth: 1.8, curveSegments: 6 });
+    const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
+    title.position.set(0, 30, -gridSizeZ / 2 - 70);
+    title.rotation.x = -Math.PI / 2;
+    scene.add(title);
   });
-
-  // Letters A–G – unchanged, but centered on the full depth
-  const letters = 'ABCDEFG'.split('');
-  for (let i = 0; i < rows; i++) {
-    const textGeo = new TextGeometry(letters[i], {
-      font,
-      size: 8,
-      depth: 0.6,
-      curveSegments: 4
-    });
-    const mesh = new THREE.Mesh(textGeo, textMat);
-
-    const cellCenterZ = -gridSizeZ / 2 + (i + 0.5) * cellDepth;
-    mesh.position.set(-gridSizeX / 2 - 35, 0.2, cellCenterZ);
-    mesh.rotation.x = -Math.PI / 2;
-    scene.add(mesh);
-  }
-
-  // Title
-  const titleGeo = new TextGeometry("Y BLOCK", {
-    font,
-    size: 18,
-    depth: 1.8,
-    curveSegments: 6
-  });
-  const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-  title.position.set(0, 30, -gridSizeZ / 2 - 70);
-  title.rotation.x = -Math.PI / 2;
-  scene.add(title);
-});
 
   // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 1.2));
@@ -206,7 +188,7 @@ scene.add(grid);
   sun.position.set(200, 400, 150);
   scene.add(sun);
 
-  // Containers tracking: key = 'num-letIdx'
+  // Containers tracking
   const containers = new Map();
 
   // Paste modal
@@ -219,89 +201,87 @@ scene.add(grid);
   pasteButton.addEventListener('click', () => pasteModal.style.display = 'block');
   closeModal.addEventListener('click', () => pasteModal.style.display = 'none');
 
- submitPaste.addEventListener('click', () => {
-  const data = pasteTextarea.value.trim();
-  if (!data) return;
+  submitPaste.addEventListener('click', () => {
+    const data = pasteTextarea.value.trim();
+    if (!data) return;
 
-  const lines = data.split('\n').map(l => l.trim()).filter(l => l);
-  let start = 0;
-  if (lines[0].toLowerCase().includes('container')) start = 1;
+    const lines = data.split('\n').map(l => l.trim()).filter(l => l);
+    let start = 0;
+    if (lines[0].toLowerCase().includes('container')) start = 1;
 
-  let placedCount = 0;
+    let placedCount = 0;
 
-  for (let i = start; i < lines.length; i++) {
-    const cols = lines[i].split('\t');
-    if (cols.length < 4) continue;
+    for (let i = start; i < lines.length; i++) {
+      const cols = lines[i].split('\t');
+      if (cols.length < 4) continue;
 
-    const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
+      const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
-    // More flexible location parse: Y39G 2, y_39g2, Y-39-G 2, etc.
-    const locClean = locationRaw.replace(/[^0-9a-gA-G\s_-]/g, '').trim(); // remove junk
-    // Parse location "Y_39G 2"
-const locMatch = locationRaw.match(/Y_?(\d+)([A-Ga-g])\s*(\d+)/i);
-if (!locMatch) { console.warn(`Invalid location: ${locationRaw}`); continue; }
+      // Flexible parse: "Y 11A 1", "Y11A1", "Y-11-A 1", etc.
+      const locMatch = locationRaw.match(/Y\s*(\d+)([A-Ga-g])\s*(\d+)/i);
+      if (!locMatch) {
+        console.warn(`Invalid location: "${locationRaw}"`);
+        continue;
+      }
 
-const rawNum = parseInt(locMatch[1]);
-const letter = locMatch[2].toUpperCase();
-const stackHeight = parseInt(locMatch[3]) || 1;
+      const rawNum = parseInt(locMatch[1]);
+      const letter = locMatch[2].toUpperCase();
+      const stackHeight = parseInt(locMatch[3]) || 1;
 
-// Only allow odd columns
-if (rawNum < 9 || rawNum > 39 || (rawNum - 9) % 2 !== 0) {
-  console.warn(`Skipped even/invalid column: ${rawNum} (only odd bays 9,11,...,39 allowed)`);
-  continue;
-}
+      // Only allow odd columns
+      if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
+        console.warn(`Skipped even/invalid column: ${rawNum} (only odd bays 9,11,...,39 allowed)`);
+        continue;
+      }
 
-const index = (rawNum - 9) / 2;  // 0 for 9, 1 for 11, ..., 15 for 39
-const letIdx = 'ABCDEFG'.indexOf(letter);
+      const index = (rawNum - 9) / 2; // 0 for 9, 1 for 11, etc.
+      const letIdx = 'ABCDEFG'.indexOf(letter);
 
-if (index < 0 || index >= numOddCols || letIdx === -1 || stackHeight < 1) {
-  console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
-  continue;
-}
+      if (index < 0 || index >= numOddCols || letIdx === -1 || stackHeight < 1) {
+        console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
+        continue;
+      }
 
-const x = -gridSizeX / 2 + (index + 0.5) * cellWidth;
-const z = -gridSizeZ / 2 + (letIdx + 0.5) * cellDepth;
-const key = `${index}-${letIdx}`;
+      const x = -gridSizeX / 2 + (index + 0.5) * cellWidth;
+      const z = -gridSizeZ / 2 + (letIdx + 0.5) * cellDepth;
+      const key = `${index}-${letIdx}`;
 
-    // Container size from group
-    let contLength = 20;
-    const groupLower = group.toLowerCase();
-    if (groupLower.includes('40') || groupLower === '40') contLength = 40;
+      // Container size from group
+      let contLength = 20;
+      const groupLower = group.toLowerCase();
+      if (groupLower.includes('40') || groupLower === '40') contLength = 40;
+      const contWidth = 10;
+      const contHeight = 8.5;
+      const yBase = (stackHeight - 1) * contHeight;
 
-    const contWidth = 10;
-    const contHeight = 8.5;
-    const yBase = (stackHeight - 1) * contHeight;
+      const contGeo = new THREE.BoxGeometry(contLength, contHeight, contWidth);
+      const colorHash = group ? group.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 0xffffff : 0xaaaaaa;
+      const contMat = new THREE.MeshStandardMaterial({ color: colorHash });
+      const contMesh = new THREE.Mesh(contGeo, contMat);
+      contMesh.position.set(x, yBase + contHeight / 2, z);
+      scene.add(contMesh);
 
-    const contGeo = new THREE.BoxGeometry(contLength, contHeight, contWidth);
-    const colorHash = group ? group.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 0xffffff : 0xaaaaaa;
-    const contMat = new THREE.MeshStandardMaterial({ color: colorHash });
-    const contMesh = new THREE.Mesh(contGeo, contMat);
-    contMesh.position.set(x, yBase + contHeight / 2, z);
-    scene.add(contMesh);
-
-    // Label
-    loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-      const labelGeo = new TextGeometry(`${containerNum} (${group || '20'})`, {
-        font, size: 2.5, depth: 0.3
+      // Label
+      loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+        const labelGeo = new TextGeometry(`${containerNum} (${group || '20'})`, { font, size: 2.5, depth: 0.3 });
+        const label = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        label.position.set(x - contLength / 2 + 2, yBase + contHeight + 1.5, z + contWidth / 2 - 1);
+        label.rotation.y = Math.PI / 2;
+        scene.add(label);
       });
-      const label = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ color: 0x000000 }));
-      label.position.set(x - contLength / 2 + 2, yBase + contHeight + 1.5, z + contWidth / 2 - 1);
-      label.rotation.y = Math.PI / 2;
-      scene.add(label);
-    });
 
-    const stack = containers.get(key) || [];
-    stack.push(contMesh);
-    containers.set(key, stack);
+      const stack = containers.get(key) || [];
+      stack.push(contMesh);
+      containers.set(key, stack);
 
-    placedCount++;
-  }
+      placedCount++;
+    }
 
-  console.log(`Placed ${placedCount} containers successfully`);
+    console.log(`Placed ${placedCount} containers successfully`);
 
-  pasteModal.style.display = 'none';
-  pasteTextarea.value = '';
-});
+    pasteModal.style.display = 'none';
+    pasteTextarea.value = '';
+  });
 
   // ─── Animate ───────────────────────────────────────────────────
   function animate() {
