@@ -73,8 +73,8 @@
   scene.background = new THREE.Color(0x88aaff);
   scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
 
-  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 4000);
-  camera.position.set(120, 20, 60); // farther/higher to see full yard
+  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 3000);
+  camera.position.set(80, 10, 35); // adjusted for better overview
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
@@ -129,8 +129,8 @@
   for (let n = 9; n <= 39; n += 2) oddCols.push(n);
   const numOddCols = oddCols.length; // 16
   const rows = 7; // A to G
-  const cellWidth = 30;  // ← reduced from 40 → yard looks less stretched
-  const cellDepth = 10;
+  const cellWidth = 40; // X – numbers/columns
+  const cellDepth = 10; // Z – letters/rows
   const gridSizeX = numOddCols * cellWidth;
   const gridSizeZ = rows * cellDepth;
 
@@ -153,23 +153,23 @@
   loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
     const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // Numbers: only odd, centered
+    // Numbers: only odd, centered over cells
     oddCols.forEach((num, index) => {
       const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5, curveSegments: 4 });
       const mesh = new THREE.Mesh(textGeo, textMat);
       const cellCenterX = -gridSizeX / 2 + (index + 0.5) * cellWidth;
-      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 18); // tuned offset
+      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 25); // further back
       mesh.rotation.x = -Math.PI / 2;
       scene.add(mesh);
     });
 
-    // Letters A–G: centered
+    // Letters A–G: centered over rows
     const letters = 'ABCDEFG'.split('');
     for (let i = 0; i < rows; i++) {
       const textGeo = new TextGeometry(letters[i], { font, size: 8, depth: 0.6, curveSegments: 4 });
       const mesh = new THREE.Mesh(textGeo, textMat);
       const cellCenterZ = -gridSizeZ / 2 + (i + 0.5) * cellDepth;
-      mesh.position.set(-gridSizeX / 2 - 28, 0.2, cellCenterZ); // tuned offset
+      mesh.position.set(-gridSizeX / 2 - 40, 0.2, cellCenterZ); // further left
       mesh.rotation.x = -Math.PI / 2;
       scene.add(mesh);
     }
@@ -177,7 +177,7 @@
     // Title
     const titleGeo = new TextGeometry("Y BLOCK", { font, size: 18, depth: 1.8, curveSegments: 6 });
     const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-    title.position.set(0, 30, -gridSizeZ / 2 - 60);
+    title.position.set(0, 30, -gridSizeZ / 2 - 70);
     title.rotation.x = -Math.PI / 2;
     scene.add(title);
   });
@@ -217,21 +217,19 @@
 
       const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
-      // Very flexible regex: handles "Y 11A 1", "Y_ 11A 2", "Y11A3", "Y-11-A 4", etc.
-      const locMatch = locationRaw.match(/Y\s*[_-]?(\d+)([A-Ga-g])\s*(\d+)/i);
+      // Super flexible regex: matches "Y11A1", "Y 11A 1", "Y_11A 1", "Y-11-A 2", with spaces around
+      const locMatch = locationRaw.match(/Y\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
       if (!locMatch) {
         console.warn(`Invalid location: "${locationRaw}"`);
         continue;
       }
-
-      console.log(`Parsed "${locationRaw}" → groups:`, locMatch.slice(1)); // debug
 
       const rawNum = parseInt(locMatch[1]);
       const letter = locMatch[2].toUpperCase();
       const stackHeight = parseInt(locMatch[3]) || 1;
 
       if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
-        console.warn(`Skipped even/invalid column: ${rawNum}`);
+        console.warn(`Skipped even/invalid column: ${rawNum} (only odd bays 9,11,...,39 allowed)`);
         continue;
       }
 
