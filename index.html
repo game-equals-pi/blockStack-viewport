@@ -85,6 +85,97 @@
   import { FontLoader } from 'three/addons/loaders/FontLoader.js';
   import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
+  // ─── 2D Yard Layout ────────────────────────────────────────────
+const twoDPage = document.getElementById('two-d-page');
+const twoDCanvas = document.getElementById('two-d-canvas');
+const twoDCtx = twoDCanvas.getContext('2d');
+
+function resize2DCanvas() {
+  twoDCanvas.width = window.innerWidth;
+  twoDCanvas.height = window.innerHeight;
+}
+
+window.addEventListener('resize', resize2DCanvas);
+resize2DCanvas();
+
+function draw2DYard() {
+  twoDCtx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
+  twoDCtx.fillStyle = '#88aaff';
+  twoDCtx.fillRect(0, 0, twoDCanvas.width, twoDCanvas.height);
+
+  // Center the yard drawing
+  const centerX = twoDCanvas.width / 2;
+  const centerY = twoDCanvas.height / 2;
+  const yardWidth = numOddCols * 40;   // scaled down pixels
+  const yardHeight = rows * 40;
+  const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
+
+  twoDCtx.save();
+  twoDCtx.translate(centerX, centerY);
+  twoDCtx.scale(scale, scale);
+
+  // Yard background
+  twoDCtx.fillStyle = '#555577';
+  twoDCtx.fillRect(-yardWidth/2, -yardHeight/2, yardWidth, yardHeight);
+
+  // Grid lines
+  twoDCtx.strokeStyle = '#aaccff';
+  twoDCtx.lineWidth = 1 / scale; // keep lines consistent
+  for (let i = 0; i <= numOddCols; i++) {
+    const x = -yardWidth/2 + i * 40;
+    twoDCtx.beginPath();
+    twoDCtx.moveTo(x, -yardHeight/2);
+    twoDCtx.lineTo(x, yardHeight/2);
+    twoDCtx.stroke();
+  }
+  for (let i = 0; i <= rows; i++) {
+    const y = -yardHeight/2 + i * 40;
+    twoDCtx.beginPath();
+    twoDCtx.moveTo(-yardWidth/2, y);
+    twoDCtx.lineTo(yardWidth/2, y);
+    twoDCtx.stroke();
+  }
+
+  // Number labels (odd columns)
+  twoDCtx.fillStyle = 'white';
+  twoDCtx.font = 'bold 16px Arial';
+  twoDCtx.textAlign = 'center';
+  twoDCtx.textBaseline = 'middle';
+  oddCols.forEach((num, idx) => {
+    const x = -yardWidth/2 + (idx + 0.5) * 40;
+    twoDCtx.fillText(num, x, -yardHeight/2 - 30);
+  });
+
+  // Letter labels (A-G)
+  'ABCDEFG'.split('').forEach((let, idx) => {
+    const y = -yardHeight/2 + (idx + 0.5) * 40;
+    twoDCtx.fillText(let, -yardWidth/2 - 30, y);
+  });
+
+  // Title
+  twoDCtx.font = 'bold 32px Arial';
+  twoDCtx.fillText('Y BLOCK', 0, -yardHeight/2 - 80);
+
+  // Example block stacks (rectangles)
+  twoDCtx.fillStyle = 'rgba(255, 100, 100, 0.6)';
+  twoDCtx.fillRect(-200, -100, 120, 80); // example stack 1
+  twoDCtx.fillStyle = 'rgba(100, 255, 100, 0.6)';
+  twoDCtx.fillRect(100, 50, 160, 60);    // example stack 2
+
+  twoDCtx.restore();
+}
+
+// Draw when switching to 2D page
+document.getElementById('yard-layout-button').addEventListener('click', () => {
+  twoDPage.style.display = 'block';
+  draw2DYard();
+  settingsMenu.style.display = 'none';
+});
+
+document.getElementById('back-button').addEventListener('click', () => {
+  twoDPage.style.display = 'none';
+});
+
   // ─── Scene setup ───────────────────────────────────────────────
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x88aaff);
