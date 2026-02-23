@@ -6,12 +6,8 @@
   <title>Y Block – 3D Viewport</title>
   <style>
     body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
-    #three-canvas { 
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; 
-    }
-    #two-d-page { 
-      position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; 
-    }
+    #three-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; }
+    #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
     #two-d-canvas { width: 100%; height: 100%; display: block; }
     #settings-button {
       position: absolute; top: 20px; left: 20px; z-index: 110;
@@ -50,7 +46,7 @@
 </head>
 <body>
 
-<canvas id="three-canvas"></canvas> <!-- For 3D -->
+<canvas id="three-canvas"></canvas>
 
 <div id="two-d-page">
   <canvas id="two-d-canvas"></canvas>
@@ -89,7 +85,7 @@
   import { FontLoader } from 'three/addons/loaders/FontLoader.js';
   import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-  // ─── 3D Scene Setup (unchanged from your last working version) ───
+  // ─── 3D Scene Setup ────────────────────────────────────────────
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x88aaff);
   scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
@@ -121,9 +117,57 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // Ground & Labels (same as before, omitted for brevity – keep your existing code here)
+  // ─── Ground & Labels ───────────────────────────────────────────
+  const oddCols = [];
+  for (let n = 9; n <= 39; n += 2) oddCols.push(n);
+  const numOddCols = oddCols.length;
+  const rows = 7;
+  const cellWidth = 30;
+  const cellDepth = 10;
+  const gridSizeX = numOddCols * cellWidth;
+  const gridSizeZ = rows * cellDepth;
 
-  // Lights, containers, paste modal (keep your existing code)
+  const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
+  const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
+  const plane = new THREE.Mesh(planeGeo, planeMat);
+  plane.rotation.x = -Math.PI / 2;
+  plane.position.y = -0.01;
+  scene.add(plane);
+
+  const loader = new FontLoader();
+  loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+    const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    oddCols.forEach((num, index) => {
+      const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5, curveSegments: 4 });
+      const mesh = new THREE.Mesh(textGeo, textMat);
+      const cellCenterX = -gridSizeX / 2 + (index + 0.5) * cellWidth;
+      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 18);
+      mesh.rotation.x = -Math.PI / 2;
+      scene.add(mesh);
+    });
+
+    const letters = 'ABCDEFG'.split('');
+    for (let i = 0; i < rows; i++) {
+      const textGeo = new TextGeometry(letters[i], { font, size: 8, depth: 0.6, curveSegments: 4 });
+      const mesh = new THREE.Mesh(textGeo, textMat);
+      const cellCenterZ = -gridSizeZ / 2 + (i + 0.5) * cellDepth;
+      mesh.position.set(-gridSizeX / 2 - 30, 0.2, cellCenterZ);
+      mesh.rotation.x = -Math.PI / 2;
+      scene.add(mesh);
+    }
+
+    const titleGeo = new TextGeometry("Y BLOCK", { font, size: 18, depth: 1.8, curveSegments: 6 });
+    const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
+    title.position.set(0, 30, -gridSizeZ / 2 - 60);
+    title.rotation.x = -Math.PI / 2;
+    scene.add(title);
+  });
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+  const sun = new THREE.DirectionalLight(0xffffe0, 1.5);
+  sun.position.set(200, 400, 150);
+  scene.add(sun);
 
   // ─── 2D Yard Layout ────────────────────────────────────────────
   const twoDPage = document.getElementById('two-d-page');
@@ -137,7 +181,6 @@
   window.addEventListener('resize', resize2DCanvas);
   resize2DCanvas();
 
-  // Block stack data (array of objects – we'll make these draggable)
   let blockStacks = [
     { id: 1, name: 'Stack A', x: -200, y: -100, width: 120, height: 80, color: 'rgba(255, 100, 100, 0.7)', rotation: 0 },
     { id: 2, name: 'Stack B', x: 100, y: 50, width: 160, height: 60, color: 'rgba(100, 255, 100, 0.7)', rotation: 0 }
@@ -162,7 +205,6 @@
     twoDCtx.translate(centerX, centerY);
     twoDCtx.scale(scale, scale);
 
-    // Yard background & grid (same as before)
     twoDCtx.fillStyle = '#555577';
     twoDCtx.fillRect(-yardWidth/2, -yardHeight/2, yardWidth, yardHeight);
 
@@ -183,7 +225,6 @@
       twoDCtx.stroke();
     }
 
-    // Labels (same)
     twoDCtx.fillStyle = 'white';
     twoDCtx.font = 'bold 16px Arial';
     twoDCtx.textAlign = 'center';
@@ -201,39 +242,33 @@
     twoDCtx.font = 'bold 32px Arial';
     twoDCtx.fillText('Y BLOCK', 0, -yardHeight/2 - 80);
 
-    // Draw draggable blocks
     blockStacks.forEach(block => {
       twoDCtx.save();
       twoDCtx.translate(block.x + block.width/2, block.y + block.height/2);
       twoDCtx.rotate(block.rotation * Math.PI / 180);
       twoDCtx.translate(-block.width/2, -block.height/2);
-
       twoDCtx.fillStyle = block.color;
       twoDCtx.fillRect(0, 0, block.width, block.height);
       twoDCtx.strokeStyle = '#000';
       twoDCtx.lineWidth = 2 / scale;
       twoDCtx.strokeRect(0, 0, block.width, block.height);
-
-      // Name label
       twoDCtx.fillStyle = 'white';
       twoDCtx.font = 'bold 14px Arial';
       twoDCtx.textAlign = 'center';
       twoDCtx.fillText(block.name, block.width/2, block.height/2 + 5);
-
       twoDCtx.restore();
     });
 
     twoDCtx.restore();
   }
 
-  // Mouse interaction for dragging
+  // Dragging
   twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return; // left click only
+    if (e.button !== 0) return;
     const rect = twoDCanvas.getBoundingClientRect();
     const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
     const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
 
-    // Convert to scaled yard coordinates
     const centerX = twoDCanvas.width / 2;
     const centerY = twoDCanvas.height / 2;
     const yardWidth = numOddCols * 40;
@@ -242,7 +277,6 @@
     const yardMouseX = (mouseX - centerX) / scale;
     const yardMouseY = (mouseY - centerY) / scale;
 
-    // Find clicked block (reverse order for topmost)
     selectedBlock = null;
     for (let i = blockStacks.length - 1; i >= 0; i--) {
       const b = blockStacks[i];
@@ -276,14 +310,8 @@
     draw2DYard();
   });
 
-  twoDCanvas.addEventListener('mouseup', () => {
-    isDragging = false;
-    selectedBlock = null;
-  });
-
-  twoDCanvas.addEventListener('mouseleave', () => {
-    isDragging = false;
-  });
+  twoDCanvas.addEventListener('mouseup', () => isDragging = false);
+  twoDCanvas.addEventListener('mouseleave', () => isDragging = false);
 
   // Right-click menu
   twoDCanvas.addEventListener('contextmenu', e => {
@@ -311,11 +339,11 @@
     }
 
     if (clickedBlock) {
-      if (confirm(`Delete "${clickedBlock.name}"?`)) {
+      const action = prompt(`Actions for "${clickedBlock.name}":\n1 = Delete\n2 = Rotate 90°\nEnter number:`);
+      if (action === '1') {
         blockStacks = blockStacks.filter(b => b !== clickedBlock);
         draw2DYard();
-      } else if (confirm(`Rotate "${clickedBlock.name}" 90°?`)) {
-        // Simple 90° rotate (swap width/height for visual effect)
+      } else if (action === '2') {
         const temp = clickedBlock.width;
         clickedBlock.width = clickedBlock.height;
         clickedBlock.height = temp;
@@ -325,19 +353,37 @@
     }
   });
 
-  // Draw when switching to 2D
+  // ─── Settings & Navigation ─────────────────────────────────────
+  const settingsButton = document.getElementById('settings-button');
+  const settingsMenu = document.getElementById('settings-menu');
+
+  settingsButton.addEventListener('click', () => {
+    settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
+  });
+
+  document.addEventListener('click', e => {
+    if (!settingsButton.contains(e.target) && !settingsMenu.contains(e.target)) {
+      settingsMenu.style.display = 'none';
+    }
+  });
+
   document.getElementById('yard-layout-button').addEventListener('click', () => {
-    twoDPage.style.display = 'block';
+    document.getElementById('two-d-page').style.display = 'block';
     draw2DYard();
     settingsMenu.style.display = 'none';
   });
 
   document.getElementById('back-button').addEventListener('click', () => {
-    twoDPage.style.display = 'none';
+    document.getElementById('two-d-page').style.display = 'none';
   });
 
-  // Rest of your 3D code (paste modal, animate, etc.) remains here...
-  // (paste your existing containers, paste logic, animate function, etc.)
+  // ─── Animate ───────────────────────────────────────────────────
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
 </script>
 </body>
 </html>
