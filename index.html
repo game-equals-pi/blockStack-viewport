@@ -6,8 +6,12 @@
   <title>Y Block – 3D Viewport</title>
   <style>
     body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
-    #three-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; }
-    #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
+    #three-canvas { 
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; 
+    }
+    #two-d-page { 
+      position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; 
+    }
     #two-d-canvas { width: 100%; height: 100%; display: block; }
     #settings-button {
       position: absolute; top: 20px; left: 20px; z-index: 110;
@@ -46,7 +50,7 @@
 </head>
 <body>
 
-<canvas id="three-canvas"></canvas>
+<canvas id="three-canvas"></canvas> <!-- For 3D -->
 
 <div id="two-d-page">
   <canvas id="two-d-canvas"></canvas>
@@ -181,6 +185,7 @@
   window.addEventListener('resize', resize2DCanvas);
   resize2DCanvas();
 
+  // Block stack data (array of objects – we'll make these draggable)
   let blockStacks = [
     { id: 1, name: 'Stack A', x: -200, y: -100, width: 120, height: 80, color: 'rgba(255, 100, 100, 0.7)', rotation: 0 },
     { id: 2, name: 'Stack B', x: 100, y: 50, width: 160, height: 60, color: 'rgba(100, 255, 100, 0.7)', rotation: 0 }
@@ -205,6 +210,7 @@
     twoDCtx.translate(centerX, centerY);
     twoDCtx.scale(scale, scale);
 
+    // Yard background & grid
     twoDCtx.fillStyle = '#555577';
     twoDCtx.fillRect(-yardWidth/2, -yardHeight/2, yardWidth, yardHeight);
 
@@ -225,6 +231,7 @@
       twoDCtx.stroke();
     }
 
+    // Labels
     twoDCtx.fillStyle = 'white';
     twoDCtx.font = 'bold 16px Arial';
     twoDCtx.textAlign = 'center';
@@ -242,6 +249,7 @@
     twoDCtx.font = 'bold 32px Arial';
     twoDCtx.fillText('Y BLOCK', 0, -yardHeight/2 - 80);
 
+    // Draw draggable blocks
     blockStacks.forEach(block => {
       twoDCtx.save();
       twoDCtx.translate(block.x + block.width/2, block.y + block.height/2);
@@ -262,13 +270,14 @@
     twoDCtx.restore();
   }
 
-  // Dragging
+  // Mouse interaction for dragging
   twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
+    if (e.button !== 0) return; // left click only
     const rect = twoDCanvas.getBoundingClientRect();
     const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
     const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
 
+    // Convert to scaled yard coordinates
     const centerX = twoDCanvas.width / 2;
     const centerY = twoDCanvas.height / 2;
     const yardWidth = numOddCols * 40;
@@ -310,8 +319,14 @@
     draw2DYard();
   });
 
-  twoDCanvas.addEventListener('mouseup', () => isDragging = false);
-  twoDCanvas.addEventListener('mouseleave', () => isDragging = false);
+  twoDCanvas.addEventListener('mouseup', () => {
+    isDragging = false;
+    selectedBlock = null;
+  });
+
+  twoDCanvas.addEventListener('mouseleave', () => {
+    isDragging = false;
+  });
 
   // Right-click menu
   twoDCanvas.addEventListener('contextmenu', e => {
@@ -339,11 +354,10 @@
     }
 
     if (clickedBlock) {
-      const action = prompt(`Actions for "${clickedBlock.name}":\n1 = Delete\n2 = Rotate 90°\nEnter number:`);
-      if (action === '1') {
+      if (confirm(`Delete "${clickedBlock.name}"?`)) {
         blockStacks = blockStacks.filter(b => b !== clickedBlock);
         draw2DYard();
-      } else if (action === '2') {
+      } else if (confirm(`Rotate "${clickedBlock.name}" 90°?`)) {
         const temp = clickedBlock.width;
         clickedBlock.width = clickedBlock.height;
         clickedBlock.height = temp;
@@ -353,28 +367,30 @@
     }
   });
 
-  // ─── Settings & Navigation ─────────────────────────────────────
-  const settingsButton = document.getElementById('settings-button');
-  const settingsMenu = document.getElementById('settings-menu');
-
-  settingsButton.addEventListener('click', () => {
-    settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
-  });
-
-  document.addEventListener('click', e => {
-    if (!settingsButton.contains(e.target) && !settingsMenu.contains(e.target)) {
-      settingsMenu.style.display = 'none';
-    }
-  });
-
+  // Draw when switching to 2D page
   document.getElementById('yard-layout-button').addEventListener('click', () => {
-    document.getElementById('two-d-page').style.display = 'block';
+    twoDPage.style.display = 'block';
     draw2DYard();
     settingsMenu.style.display = 'none';
   });
 
   document.getElementById('back-button').addEventListener('click', () => {
-    document.getElementById('two-d-page').style.display = 'none';
+    twoDPage.style.display = 'none';
+  });
+
+  // ─── Settings menu toggle ──────────────────────────────────────
+  const settingsButton = document.getElementById('settings-button');
+  const settingsMenu = document.getElementById('settings-menu');
+  const yardLayoutButton = document.getElementById('yard-layout-button');
+
+  settingsButton.addEventListener('click', () => {
+    settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!settingsButton.contains(e.target) && !settingsMenu.contains(e.target)) {
+      settingsMenu.style.display = 'none';
+    }
   });
 
   // ─── Animate ───────────────────────────────────────────────────
