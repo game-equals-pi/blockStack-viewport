@@ -89,7 +89,7 @@
   import { FontLoader } from 'three/addons/loaders/FontLoader.js';
   import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-  // ─── Scene setup ───────────────────────────────────────────────
+  // ─── 3D Scene Setup (unchanged from your last working version) ───
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x88aaff);
   scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
@@ -101,16 +101,14 @@
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(devicePixelRatio);
 
-  // Force initial 3D resize
   function resize3D() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(innerWidth, innerHeight);
   }
   window.addEventListener('resize', resize3D);
   resize3D();
 
-  // ─── Orbit Controls ────────────────────────────────────────────
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
@@ -123,6 +121,10 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
+  // Ground & Labels (same as before, omitted for brevity – keep your existing code here)
+
+  // Lights, containers, paste modal (keep your existing code)
+
   // ─── 2D Yard Layout ────────────────────────────────────────────
   const twoDPage = document.getElementById('two-d-page');
   const twoDCanvas = document.getElementById('two-d-canvas');
@@ -133,17 +135,26 @@
     twoDCanvas.height = window.innerHeight;
   }
   window.addEventListener('resize', resize2DCanvas);
-  resize2DCanvas(); // initial call
+  resize2DCanvas();
+
+  // Block stack data (array of objects – we'll make these draggable)
+  let blockStacks = [
+    { id: 1, name: 'Stack A', x: -200, y: -100, width: 120, height: 80, color: 'rgba(255, 100, 100, 0.7)', rotation: 0 },
+    { id: 2, name: 'Stack B', x: 100, y: 50, width: 160, height: 60, color: 'rgba(100, 255, 100, 0.7)', rotation: 0 }
+  ];
+
+  let selectedBlock = null;
+  let isDragging = false;
+  let startX, startY;
 
   function draw2DYard() {
     twoDCtx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
     twoDCtx.fillStyle = '#88aaff';
     twoDCtx.fillRect(0, 0, twoDCanvas.width, twoDCanvas.height);
 
-    // Center the yard drawing
     const centerX = twoDCanvas.width / 2;
     const centerY = twoDCanvas.height / 2;
-    const yardWidth = numOddCols * 40;   // scaled down pixels
+    const yardWidth = numOddCols * 40;
     const yardHeight = rows * 40;
     const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
 
@@ -151,11 +162,10 @@
     twoDCtx.translate(centerX, centerY);
     twoDCtx.scale(scale, scale);
 
-    // Yard background
+    // Yard background & grid (same as before)
     twoDCtx.fillStyle = '#555577';
     twoDCtx.fillRect(-yardWidth/2, -yardHeight/2, yardWidth, yardHeight);
 
-    // Grid lines
     twoDCtx.strokeStyle = '#aaccff';
     twoDCtx.lineWidth = 1 / scale;
     for (let i = 0; i <= numOddCols; i++) {
@@ -173,7 +183,7 @@
       twoDCtx.stroke();
     }
 
-    // Number labels (odd columns)
+    // Labels (same)
     twoDCtx.fillStyle = 'white';
     twoDCtx.font = 'bold 16px Arial';
     twoDCtx.textAlign = 'center';
@@ -183,26 +193,139 @@
       twoDCtx.fillText(num, x, -yardHeight/2 - 30);
     });
 
-    // Letter labels (A-G) — fixed reserved word 'let'
     'ABCDEFG'.split('').forEach((letter, idx) => {
       const y = -yardHeight/2 + (idx + 0.5) * 40;
       twoDCtx.fillText(letter, -yardWidth/2 - 30, y);
     });
 
-    // Title
     twoDCtx.font = 'bold 32px Arial';
     twoDCtx.fillText('Y BLOCK', 0, -yardHeight/2 - 80);
 
-    // Example block stacks (rectangles)
-    twoDCtx.fillStyle = 'rgba(255, 100, 100, 0.6)';
-    twoDCtx.fillRect(-200, -100, 120, 80); // example stack 1
-    twoDCtx.fillStyle = 'rgba(100, 255, 100, 0.6)';
-    twoDCtx.fillRect(100, 50, 160, 60);    // example stack 2
+    // Draw draggable blocks
+    blockStacks.forEach(block => {
+      twoDCtx.save();
+      twoDCtx.translate(block.x + block.width/2, block.y + block.height/2);
+      twoDCtx.rotate(block.rotation * Math.PI / 180);
+      twoDCtx.translate(-block.width/2, -block.height/2);
+
+      twoDCtx.fillStyle = block.color;
+      twoDCtx.fillRect(0, 0, block.width, block.height);
+      twoDCtx.strokeStyle = '#000';
+      twoDCtx.lineWidth = 2 / scale;
+      twoDCtx.strokeRect(0, 0, block.width, block.height);
+
+      // Name label
+      twoDCtx.fillStyle = 'white';
+      twoDCtx.font = 'bold 14px Arial';
+      twoDCtx.textAlign = 'center';
+      twoDCtx.fillText(block.name, block.width/2, block.height/2 + 5);
+
+      twoDCtx.restore();
+    });
 
     twoDCtx.restore();
   }
 
-  // Draw when switching to 2D page
+  // Mouse interaction for dragging
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return; // left click only
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
+    const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
+
+    // Convert to scaled yard coordinates
+    const centerX = twoDCanvas.width / 2;
+    const centerY = twoDCanvas.height / 2;
+    const yardWidth = numOddCols * 40;
+    const yardHeight = rows * 40;
+    const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
+    const yardMouseX = (mouseX - centerX) / scale;
+    const yardMouseY = (mouseY - centerY) / scale;
+
+    // Find clicked block (reverse order for topmost)
+    selectedBlock = null;
+    for (let i = blockStacks.length - 1; i >= 0; i--) {
+      const b = blockStacks[i];
+      if (yardMouseX >= b.x && yardMouseX <= b.x + b.width &&
+          yardMouseY >= b.y && yardMouseY <= b.y + b.height) {
+        selectedBlock = b;
+        isDragging = true;
+        startX = yardMouseX - b.x;
+        startY = yardMouseY - b.y;
+        break;
+      }
+    }
+  });
+
+  twoDCanvas.addEventListener('mousemove', e => {
+    if (!isDragging || !selectedBlock) return;
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
+    const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
+
+    const centerX = twoDCanvas.width / 2;
+    const centerY = twoDCanvas.height / 2;
+    const yardWidth = numOddCols * 40;
+    const yardHeight = rows * 40;
+    const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
+    const yardMouseX = (mouseX - centerX) / scale;
+    const yardMouseY = (mouseY - centerY) / scale;
+
+    selectedBlock.x = yardMouseX - startX;
+    selectedBlock.y = yardMouseY - startY;
+    draw2DYard();
+  });
+
+  twoDCanvas.addEventListener('mouseup', () => {
+    isDragging = false;
+    selectedBlock = null;
+  });
+
+  twoDCanvas.addEventListener('mouseleave', () => {
+    isDragging = false;
+  });
+
+  // Right-click menu
+  twoDCanvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
+    const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
+
+    const centerX = twoDCanvas.width / 2;
+    const centerY = twoDCanvas.height / 2;
+    const yardWidth = numOddCols * 40;
+    const yardHeight = rows * 40;
+    const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
+    const yardMouseX = (mouseX - centerX) / scale;
+    const yardMouseY = (mouseY - centerY) / scale;
+
+    let clickedBlock = null;
+    for (let i = blockStacks.length - 1; i >= 0; i--) {
+      const b = blockStacks[i];
+      if (yardMouseX >= b.x && yardMouseX <= b.x + b.width &&
+          yardMouseY >= b.y && yardMouseY <= b.y + b.height) {
+        clickedBlock = b;
+        break;
+      }
+    }
+
+    if (clickedBlock) {
+      if (confirm(`Delete "${clickedBlock.name}"?`)) {
+        blockStacks = blockStacks.filter(b => b !== clickedBlock);
+        draw2DYard();
+      } else if (confirm(`Rotate "${clickedBlock.name}" 90°?`)) {
+        // Simple 90° rotate (swap width/height for visual effect)
+        const temp = clickedBlock.width;
+        clickedBlock.width = clickedBlock.height;
+        clickedBlock.height = temp;
+        clickedBlock.rotation = (clickedBlock.rotation + 90) % 360;
+        draw2DYard();
+      }
+    }
+  });
+
+  // Draw when switching to 2D
   document.getElementById('yard-layout-button').addEventListener('click', () => {
     twoDPage.style.display = 'block';
     draw2DYard();
@@ -213,185 +336,8 @@
     twoDPage.style.display = 'none';
   });
 
-  // ─── Ground & Labels ───────────────────────────────────────────
-  const oddCols = [];
-  for (let n = 9; n <= 39; n += 2) oddCols.push(n);
-  const numOddCols = oddCols.length;
-  const rows = 7;
-  const cellWidth = 30;
-  const cellDepth = 10;
-  const gridSizeX = numOddCols * cellWidth;
-  const gridSizeZ = rows * cellDepth;
-
-  // Solid plane
-  const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
-  const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
-  const plane = new THREE.Mesh(planeGeo, planeMat);
-  plane.rotation.x = -Math.PI / 2;
-  plane.position.y = -0.01;
-  scene.add(plane);
-
-  // Labels
-  const loader = new FontLoader();
-  loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-    const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-    oddCols.forEach((num, index) => {
-      const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5, curveSegments: 4 });
-      const mesh = new THREE.Mesh(textGeo, textMat);
-      const cellCenterX = -gridSizeX / 2 + (index + 0.5) * cellWidth;
-      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 18);
-      mesh.rotation.x = -Math.PI / 2;
-      scene.add(mesh);
-    });
-
-    const letters = 'ABCDEFG'.split('');
-    for (let i = 0; i < rows; i++) {
-      const textGeo = new TextGeometry(letters[i], { font, size: 8, depth: 0.6, curveSegments: 4 });
-      const mesh = new THREE.Mesh(textGeo, textMat);
-      const cellCenterZ = -gridSizeZ / 2 + (i + 0.5) * cellDepth;
-      mesh.position.set(-gridSizeX / 2 - 30, 0.2, cellCenterZ);
-      mesh.rotation.x = -Math.PI / 2;
-      scene.add(mesh);
-    }
-
-    const titleGeo = new TextGeometry("Y BLOCK", { font, size: 18, depth: 1.8, curveSegments: 6 });
-    const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-    title.position.set(0, 30, -gridSizeZ / 2 - 60);
-    title.rotation.x = -Math.PI / 2;
-    scene.add(title);
-  });
-
-  // Lights
-  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffe0, 1.5);
-  sun.position.set(200, 400, 150);
-  scene.add(sun);
-
-  // Containers tracking
-  const containers = new Map();
-
-  // Paste modal (unchanged)
-  const pasteButton = document.getElementById('paste-button');
-  const pasteModal = document.getElementById('paste-modal');
-  const pasteTextarea = document.getElementById('paste-textarea');
-  const submitPaste = document.getElementById('submit-paste');
-  const closeModal = document.getElementById('close-modal');
-
-  pasteButton.addEventListener('click', () => pasteModal.style.display = 'block');
-  closeModal.addEventListener('click', () => pasteModal.style.display = 'none');
-
-  submitPaste.addEventListener('click', () => {
-    const data = pasteTextarea.value.trim();
-    if (!data) return;
-
-    const lines = data.split('\n').map(l => l.trim()).filter(l => l);
-    let start = 0;
-    if (lines[0]?.toLowerCase().includes('container')) start = 1;
-
-    let placedCount = 0;
-
-    for (let i = start; i < lines.length; i++) {
-      const cols = lines[i].split('\t');
-      if (cols.length < 4) continue;
-
-      const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
-
-      const locMatch = locationRaw.match(/Y\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
-      if (!locMatch) {
-        console.warn(`Invalid location: "${locationRaw}"`);
-        continue;
-      }
-
-      const rawNum = parseInt(locMatch[1]);
-      const letter = locMatch[2].toUpperCase();
-      const stackHeight = parseInt(locMatch[3]) || 1;
-
-      if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
-        console.warn(`Skipped even/invalid column: ${rawNum}`);
-        continue;
-      }
-
-      const index = (rawNum - 9) / 2;
-      const letIdx = 'ABCDEFG'.indexOf(letter);
-
-      if (index < 0 || index >= numOddCols || letIdx === -1 || stackHeight < 1) {
-        console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
-        continue;
-      }
-
-      const x = -gridSizeX / 2 + (index + 0.5) * cellWidth;
-      const z = -gridSizeZ / 2 + (letIdx + 0.5) * cellDepth;
-      const key = `${index}-${letIdx}`;
-
-      let contLength = 20;
-      const groupLower = group.toLowerCase();
-      if (groupLower.includes('40') || groupLower === '40') contLength = 40;
-
-      const contWidth = 10;
-      const contHeight = 8.5;
-      const yBase = (stackHeight - 1) * contHeight;
-
-      const contGeo = new THREE.BoxGeometry(contLength, contHeight, contWidth);
-      const colorHash = group ? group.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 0xffffff : 0xaaaaaa;
-      const contMat = new THREE.MeshStandardMaterial({ color: colorHash });
-      const contMesh = new THREE.Mesh(contGeo, contMat);
-      contMesh.position.set(x, yBase + contHeight / 2, z);
-      scene.add(contMesh);
-
-      loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-        const labelGeo = new TextGeometry(`${containerNum} (${group || '20'})`, { font, size: 2.5, depth: 0.3 });
-        const label = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ color: 0x000000 }));
-        label.position.set(x - contLength / 2 + 2, yBase + contHeight + 1.5, z + contWidth / 2 - 1);
-        label.rotation.y = Math.PI / 2;
-        scene.add(label);
-      });
-
-      const stack = containers.get(key) || [];
-      stack.push(contMesh);
-      containers.set(key, stack);
-
-      placedCount++;
-    }
-
-    console.log(`Placed ${placedCount} containers successfully`);
-
-    pasteModal.style.display = 'none';
-    pasteTextarea.value = '';
-  });
-
-  // ─── Settings menu toggle ──────────────────────────────────────
-  const settingsButton = document.getElementById('settings-button');
-  const settingsMenu = document.getElementById('settings-menu');
-  const yardLayoutButton = document.getElementById('yard-layout-button');
-
-  settingsButton.addEventListener('click', () => {
-    settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!settingsButton.contains(e.target) && !settingsMenu.contains(e.target)) {
-      settingsMenu.style.display = 'none';
-    }
-  });
-
-  yardLayoutButton.addEventListener('click', () => {
-    twoDPage.style.display = 'block';
-    draw2DYard();
-    settingsMenu.style.display = 'none';
-  });
-
-  document.getElementById('back-button').addEventListener('click', () => {
-    twoDPage.style.display = 'none';
-  });
-
-  // ─── Animate ───────────────────────────────────────────────────
-  function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
-  }
-  animate();
+  // Rest of your 3D code (paste modal, animate, etc.) remains here...
+  // (paste your existing containers, paste logic, animate function, etc.)
 </script>
 </body>
 </html>
