@@ -6,12 +6,8 @@
   <title>Y Block – 3D Viewport</title>
   <style>
     body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
-    #three-canvas { 
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; 
-    }
-    #two-d-page { 
-      position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; 
-    }
+    #three-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; }
+    #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
     #two-d-canvas { width: 100%; height: 100%; display: block; }
     #settings-button {
       position: absolute; top: 20px; left: 20px; z-index: 110;
@@ -46,15 +42,21 @@
       padding: 10px 20px; background: #007bff; color: white; border: none;
       border-radius: 6px; cursor: pointer;
     }
+    #add-block-button {
+      position: absolute; top: 20px; left: 150px; z-index: 130;
+      padding: 10px 20px; background: #28a745; color: white; border: none;
+      border-radius: 6px; cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
-<canvas id="three-canvas"></canvas> <!-- For 3D -->
+<canvas id="three-canvas"></canvas>
 
 <div id="two-d-page">
   <canvas id="two-d-canvas"></canvas>
   <button id="back-button">Back to 3D</button>
+  <button id="add-block-button">Add New Block</button>
 </div>
 
 <button id="settings-button">⚙</button>
@@ -121,7 +123,7 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // ─── Ground & Labels ───────────────────────────────────────────
+  // Ground & Labels (Y Block fixed in 3D for now)
   const oddCols = [];
   for (let n = 9; n <= 39; n += 2) oddCols.push(n);
   const numOddCols = oddCols.length;
@@ -173,6 +175,8 @@
   sun.position.set(200, 400, 150);
   scene.add(sun);
 
+  // Paste modal & containers (keep your existing logic here if needed)
+
   // ─── 2D Yard Layout ────────────────────────────────────────────
   const twoDPage = document.getElementById('two-d-page');
   const twoDCanvas = document.getElementById('two-d-canvas');
@@ -185,15 +189,24 @@
   window.addEventListener('resize', resize2DCanvas);
   resize2DCanvas();
 
-  // Block stack data (array of objects – we'll make these draggable)
-  let blockStacks = [
-    { id: 1, name: 'Stack A', x: -200, y: -100, width: 120, height: 80, color: 'rgba(255, 100, 100, 0.7)', rotation: 0 },
-    { id: 2, name: 'Stack B', x: 100, y: 50, width: 160, height: 60, color: 'rgba(100, 255, 100, 0.7)', rotation: 0 }
+  // Yard blocks data — only Y Block to start
+  let yardBlocks = [
+    {
+      id: 1,
+      name: 'Y',
+      x: 0,
+      y: 0,
+      columns: 16,   // 9 to 39 odd = 16 bays
+      rows: 7,       // A to G
+      color: 'rgba(100, 150, 255, 0.5)',
+      rotation: 0
+    }
   ];
 
   let selectedBlock = null;
   let isDragging = false;
-  let startX, startY;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
 
   function draw2DYard() {
     twoDCtx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
@@ -202,99 +215,80 @@
 
     const centerX = twoDCanvas.width / 2;
     const centerY = twoDCanvas.height / 2;
-    const yardWidth = numOddCols * 40;
-    const yardHeight = rows * 40;
-    const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
+    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7; // adjust scale
 
     twoDCtx.save();
     twoDCtx.translate(centerX, centerY);
-    twoDCtx.scale(scale, scale);
 
-    // Yard background & grid
-    twoDCtx.fillStyle = '#555577';
-    twoDCtx.fillRect(-yardWidth/2, -yardHeight/2, yardWidth, yardHeight);
-
-    twoDCtx.strokeStyle = '#aaccff';
-    twoDCtx.lineWidth = 1 / scale;
-    for (let i = 0; i <= numOddCols; i++) {
-      const x = -yardWidth/2 + i * 40;
-      twoDCtx.beginPath();
-      twoDCtx.moveTo(x, -yardHeight/2);
-      twoDCtx.lineTo(x, yardHeight/2);
-      twoDCtx.stroke();
-    }
-    for (let i = 0; i <= rows; i++) {
-      const y = -yardHeight/2 + i * 40;
-      twoDCtx.beginPath();
-      twoDCtx.moveTo(-yardWidth/2, y);
-      twoDCtx.lineTo(yardWidth/2, y);
-      twoDCtx.stroke();
-    }
-
-    // Labels
-    twoDCtx.fillStyle = 'white';
-    twoDCtx.font = 'bold 16px Arial';
-    twoDCtx.textAlign = 'center';
-    twoDCtx.textBaseline = 'middle';
-    oddCols.forEach((num, idx) => {
-      const x = -yardWidth/2 + (idx + 0.5) * 40;
-      twoDCtx.fillText(num, x, -yardHeight/2 - 30);
-    });
-
-    'ABCDEFG'.split('').forEach((letter, idx) => {
-      const y = -yardHeight/2 + (idx + 0.5) * 40;
-      twoDCtx.fillText(letter, -yardWidth/2 - 30, y);
-    });
-
-    twoDCtx.font = 'bold 32px Arial';
-    twoDCtx.fillText('Y BLOCK', 0, -yardHeight/2 - 80);
-
-    // Draw draggable blocks
-    blockStacks.forEach(block => {
+    yardBlocks.forEach(block => {
       twoDCtx.save();
-      twoDCtx.translate(block.x + block.width/2, block.y + block.height/2);
+      twoDCtx.translate(block.x * scale, block.y * scale);
       twoDCtx.rotate(block.rotation * Math.PI / 180);
-      twoDCtx.translate(-block.width/2, -block.height/2);
+
+      // Block background
       twoDCtx.fillStyle = block.color;
-      twoDCtx.fillRect(0, 0, block.width, block.height);
+      twoDCtx.fillRect(-block.columns * scale / 2, -block.rows * scale / 2,
+                       block.columns * scale, block.rows * scale);
+
+      // Border
       twoDCtx.strokeStyle = '#000';
-      twoDCtx.lineWidth = 2 / scale;
-      twoDCtx.strokeRect(0, 0, block.width, block.height);
+      twoDCtx.lineWidth = 3;
+      twoDCtx.strokeRect(-block.columns * scale / 2, -block.rows * scale / 2,
+                         block.columns * scale, block.rows * scale);
+
+      // Name label in center
       twoDCtx.fillStyle = 'white';
-      twoDCtx.font = 'bold 14px Arial';
+      twoDCtx.font = 'bold 24px Arial';
       twoDCtx.textAlign = 'center';
-      twoDCtx.fillText(block.name, block.width/2, block.height/2 + 5);
+      twoDCtx.textBaseline = 'middle';
+      twoDCtx.fillText(block.name + ' Block', 0, 0);
+
+      // Internal grid lines (scaled)
+      twoDCtx.strokeStyle = '#aaccff';
+      twoDCtx.lineWidth = 1;
+      for (let i = 1; i < block.columns; i++) {
+        const x = -block.columns * scale / 2 + i * scale;
+        twoDCtx.beginPath();
+        twoDCtx.moveTo(x, -block.rows * scale / 2);
+        twoDCtx.lineTo(x, block.rows * scale / 2);
+        twoDCtx.stroke();
+      }
+      for (let i = 1; i < block.rows; i++) {
+        const y = -block.rows * scale / 2 + i * scale;
+        twoDCtx.beginPath();
+        twoDCtx.moveTo(-block.columns * scale / 2, y);
+        twoDCtx.lineTo(block.columns * scale / 2, y);
+        twoDCtx.stroke();
+      }
+
       twoDCtx.restore();
     });
 
     twoDCtx.restore();
   }
 
-  // Mouse interaction for dragging
+  // Dragging logic
   twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return; // left click only
+    if (e.button !== 0) return;
     const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
-    const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
+    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    // Convert to scaled yard coordinates
-    const centerX = twoDCanvas.width / 2;
-    const centerY = twoDCanvas.height / 2;
-    const yardWidth = numOddCols * 40;
-    const yardHeight = rows * 40;
-    const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
-    const yardMouseX = (mouseX - centerX) / scale;
-    const yardMouseY = (mouseY - centerY) / scale;
+    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7;
 
     selectedBlock = null;
-    for (let i = blockStacks.length - 1; i >= 0; i--) {
-      const b = blockStacks[i];
-      if (yardMouseX >= b.x && yardMouseX <= b.x + b.width &&
-          yardMouseY >= b.y && yardMouseY <= b.y + b.height) {
+    for (let i = yardBlocks.length - 1; i >= 0; i--) {
+      const b = yardBlocks[i];
+      const left = b.x * scale - (b.columns * scale / 2);
+      const right = b.x * scale + (b.columns * scale / 2);
+      const top = b.y * scale - (b.rows * scale / 2);
+      const bottom = b.y * scale + (b.rows * scale / 2);
+
+      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
         selectedBlock = b;
         isDragging = true;
-        startX = yardMouseX - b.x;
-        startY = yardMouseY - b.y;
+        dragOffsetX = mouseX - b.x * scale;
+        dragOffsetY = mouseY - b.y * scale;
         break;
       }
     }
@@ -303,71 +297,85 @@
   twoDCanvas.addEventListener('mousemove', e => {
     if (!isDragging || !selectedBlock) return;
     const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
-    const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
+    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    const centerX = twoDCanvas.width / 2;
-    const centerY = twoDCanvas.height / 2;
-    const yardWidth = numOddCols * 40;
-    const yardHeight = rows * 40;
-    const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
-    const yardMouseX = (mouseX - centerX) / scale;
-    const yardMouseY = (mouseY - centerY) / scale;
+    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7;
 
-    selectedBlock.x = yardMouseX - startX;
-    selectedBlock.y = yardMouseY - startY;
+    selectedBlock.x = (mouseX - dragOffsetX) / scale;
+    selectedBlock.y = (mouseY - dragOffsetY) / scale;
     draw2DYard();
   });
 
-  twoDCanvas.addEventListener('mouseup', () => {
-    isDragging = false;
-    selectedBlock = null;
-  });
+  twoDCanvas.addEventListener('mouseup', () => isDragging = false);
+  twoDCanvas.addEventListener('mouseleave', () => isDragging = false);
 
-  twoDCanvas.addEventListener('mouseleave', () => {
-    isDragging = false;
-  });
-
-  // Right-click menu
+  // Right-click context menu
   twoDCanvas.addEventListener('contextmenu', e => {
     e.preventDefault();
     const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) / rect.width * twoDCanvas.width;
-    const mouseY = (e.clientY - rect.top) / rect.height * twoDCanvas.height;
+    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    const centerX = twoDCanvas.width / 2;
-    const centerY = twoDCanvas.height / 2;
-    const yardWidth = numOddCols * 40;
-    const yardHeight = rows * 40;
-    const scale = Math.min(twoDCanvas.width / yardWidth, twoDCanvas.height / yardHeight) * 0.7;
-    const yardMouseX = (mouseX - centerX) / scale;
-    const yardMouseY = (mouseY - centerY) / scale;
+    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7;
 
     let clickedBlock = null;
-    for (let i = blockStacks.length - 1; i >= 0; i--) {
-      const b = blockStacks[i];
-      if (yardMouseX >= b.x && yardMouseX <= b.x + b.width &&
-          yardMouseY >= b.y && yardMouseY <= b.y + b.height) {
+    for (let i = yardBlocks.length - 1; i >= 0; i--) {
+      const b = yardBlocks[i];
+      const left = b.x * scale - (b.columns * scale / 2);
+      const right = b.x * scale + (b.columns * scale / 2);
+      const top = b.y * scale - (b.rows * scale / 2);
+      const bottom = b.y * scale + (b.rows * scale / 2);
+
+      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
         clickedBlock = b;
         break;
       }
     }
 
     if (clickedBlock) {
-      if (confirm(`Delete "${clickedBlock.name}"?`)) {
-        blockStacks = blockStacks.filter(b => b !== clickedBlock);
+      const choice = prompt(`Actions for "${clickedBlock.name} Block":\n1 = Delete\n2 = Rotate 90°\nEnter number:`);
+      if (choice === '1') {
+        yardBlocks = yardBlocks.filter(b => b !== clickedBlock);
         draw2DYard();
-      } else if (confirm(`Rotate "${clickedBlock.name}" 90°?`)) {
-        const temp = clickedBlock.width;
-        clickedBlock.width = clickedBlock.height;
-        clickedBlock.height = temp;
+      } else if (choice === '2') {
+        const temp = clickedBlock.columns;
+        clickedBlock.columns = clickedBlock.rows;
+        clickedBlock.rows = temp;
         clickedBlock.rotation = (clickedBlock.rotation + 90) % 360;
         draw2DYard();
       }
     }
   });
 
-  // Draw when switching to 2D page
+  // Add New Block
+  const addBlockBtn = document.getElementById('add-block-button');
+  addBlockBtn.addEventListener('click', () => {
+    const name = prompt('Block name (e.g. X, Z):', 'NewBlock');
+    if (!name) return;
+
+    const columns = parseInt(prompt('Number of columns (bays wide):', '16'));
+    const rows = parseInt(prompt('Number of rows (depth):', '7'));
+    if (isNaN(columns) || isNaN(rows) || columns <= 0 || rows <= 0) {
+      alert('Invalid numbers');
+      return;
+    }
+
+    yardBlocks.push({
+      id: yardBlocks.length + 1,
+      name,
+      x: 0,
+      y: 0,
+      columns,
+      rows,
+      color: `rgba(${Math.random()*150+100}, ${Math.random()*150+100}, ${Math.random()*150+100}, 0.5)`,
+      rotation: 0
+    });
+
+    draw2DYard();
+  });
+
+  // Draw when entering 2D
   document.getElementById('yard-layout-button').addEventListener('click', () => {
     twoDPage.style.display = 'block';
     draw2DYard();
@@ -381,13 +389,12 @@
   // ─── Settings menu toggle ──────────────────────────────────────
   const settingsButton = document.getElementById('settings-button');
   const settingsMenu = document.getElementById('settings-menu');
-  const yardLayoutButton = document.getElementById('yard-layout-button');
 
   settingsButton.addEventListener('click', () => {
     settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
   });
 
-  document.addEventListener('click', (e) => {
+  document.addEventListener('click', e => {
     if (!settingsButton.contains(e.target) && !settingsMenu.contains(e.target)) {
       settingsMenu.style.display = 'none';
     }
