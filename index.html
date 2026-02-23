@@ -6,10 +6,22 @@
   <title>Y Block – 3D Viewport</title>
   <style>
     body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
-    #instructions {
-      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-      color: white; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 8px;
-      text-align: center; user-select: none; z-index: 100; pointer-events: none;
+    #three-canvas { position: absolute; top: 0; left: 0; z-index: 10; } /* 3D layer */
+    #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
+    #two-d-canvas { width: 100%; height: 100%; }
+    #settings-button {
+      position: absolute; top: 20px; left: 20px; z-index: 110;
+      padding: 10px; background: #333; color: white; border: none;
+      border-radius: 50%; cursor: pointer; font-size: 20px;
+    }
+    #settings-menu {
+      position: absolute; top: 60px; left: 20px; z-index: 110;
+      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;
+      display: none; color: white;
+    }
+    #settings-menu button {
+      display: block; width: 100%; padding: 10px; margin: 5px 0;
+      background: #007bff; color: white; border: none; cursor: pointer;
     }
     #paste-button {
       position: absolute; top: 20px; right: 20px; z-index: 110;
@@ -25,13 +37,25 @@
     }
     #paste-textarea { width: 100%; height: 220px; margin: 15px 0; font-family: monospace; }
     #submit-paste, #close-modal { padding: 10px 20px; margin: 8px; cursor: pointer; font-size: 14px; }
+    #back-button {
+      position: absolute; top: 20px; left: 20px; z-index: 130;
+      padding: 10px 20px; background: #007bff; color: white; border: none;
+      border-radius: 6px; cursor: pointer;
+    }
   </style>
 </head>
 <body>
 
-<div id="instructions">
-  Left-click drag = rotate • Right-click drag = pan • Scroll = zoom
-  <br><small>(Paste data anytime — no lock needed)</small>
+<canvas id="three-canvas"></canvas> <!-- For 3D -->
+
+<div id="two-d-page">
+  <canvas id="two-d-canvas"></canvas>
+  <button id="back-button">Back to 3D</button>
+</div>
+
+<button id="settings-button">⚙</button>
+<div id="settings-menu">
+  <button id="yard-layout-button">Yard Layout</button>
 </div>
 
 <button id="paste-button">Paste Excel Data</button>
@@ -67,47 +91,36 @@
   scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
 
   const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 4000);
-  camera.position.set(120, 60, 120);  // good starting view for orbit
+  camera.position.set(120, 60, 120);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('three-canvas') });
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(devicePixelRatio);
-  document.body.appendChild(renderer.domElement);
 
-  // ─── Orbit Controls (no lock needed) ───────────────────────────
+  // ─── Orbit Controls ────────────────────────────────────────────
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;          // smooth inertia
+  controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.rotateSpeed = 0.8;
   controls.zoomSpeed = 1.2;
   controls.panSpeed = 0.8;
   controls.minDistance = 20;
   controls.maxDistance = 800;
-  controls.maxPolarAngle = Math.PI / 2;   // don't go below ground
-  controls.target.set(0, 0, 0);           // look at center of yard
+  controls.maxPolarAngle = Math.PI / 2;
+  controls.target.set(0, 0, 0);
   controls.update();
-
-  // Hide instructions after first interaction (optional)
-  let hasInteracted = false;
-  const instructions = document.getElementById('instructions');
-  controls.addEventListener('change', () => {
-    if (!hasInteracted) {
-      instructions.style.display = 'none';
-      hasInteracted = true;
-    }
-  });
 
   // ─── Ground & Labels ───────────────────────────────────────────
   const oddCols = [];
   for (let n = 9; n <= 39; n += 2) oddCols.push(n);
-  const numOddCols = oddCols.length; // 16
-  const rows = 7; // A to G
-  const cellWidth = 30;   // tuned smaller so yard isn't too stretched
+  const numOddCols = oddCols.length;
+  const rows = 7;
+  const cellWidth = 30;
   const cellDepth = 10;
   const gridSizeX = numOddCols * cellWidth;
   const gridSizeZ = rows * cellDepth;
 
-  // Solid plane only
+  // Solid plane
   const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
   const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
   const plane = new THREE.Mesh(planeGeo, planeMat);
@@ -115,14 +128,12 @@
   plane.position.y = -0.01;
   scene.add(plane);
 
-  // NO GridHelper — removed as requested
+  // Labels (same as before)
 
-  // ─── Labels ────────────────────────────────────────────────────
-  const loader = new FontLoader();
+const loader = new FontLoader();
   loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
     const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // Numbers (odd only, centered)
     oddCols.forEach((num, index) => {
       const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5, curveSegments: 4 });
       const mesh = new THREE.Mesh(textGeo, textMat);
@@ -132,7 +143,6 @@
       scene.add(mesh);
     });
 
-    // Letters A–G
     const letters = 'ABCDEFG'.split('');
     for (let i = 0; i < rows; i++) {
       const textGeo = new TextGeometry(letters[i], { font, size: 8, depth: 0.6, curveSegments: 4 });
@@ -143,7 +153,6 @@
       scene.add(mesh);
     }
 
-    // Title
     const titleGeo = new TextGeometry("Y BLOCK", { font, size: 18, depth: 1.8, curveSegments: 6 });
     const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
     title.position.set(0, 30, -gridSizeZ / 2 - 60);
@@ -160,7 +169,7 @@
   // Containers tracking
   const containers = new Map();
 
-  // Paste modal logic (unchanged except for better regex)
+  // Paste modal
   const pasteButton = document.getElementById('paste-button');
   const pasteModal = document.getElementById('paste-modal');
   const pasteTextarea = document.getElementById('paste-textarea');
@@ -176,7 +185,7 @@
 
     const lines = data.split('\n').map(l => l.trim()).filter(l => l);
     let start = 0;
-    if (lines[0]?.toLowerCase().includes('container')) start = 1;
+    if (lines[0].toLowerCase().includes('container')) start = 1;
 
     let placedCount = 0;
 
@@ -186,7 +195,7 @@
 
       const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
-      // Super flexible location parse
+      // Flexible parse
       const locMatch = locationRaw.match(/Y\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
       if (!locMatch) {
         console.warn(`Invalid location: "${locationRaw}"`);
@@ -253,7 +262,7 @@
   // ─── Animate ───────────────────────────────────────────────────
   function animate() {
     requestAnimationFrame(animate);
-    controls.update(); // required for damping
+    controls.update();
     renderer.render(scene, camera);
   }
   animate();
