@@ -7,15 +7,9 @@
   <style>
     body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
     #instructions {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      color: white; background: rgba(0,0,0,0.7); padding: 20px 40px; border-radius: 12px;
-      text-align: center; cursor: pointer; user-select: none; z-index: 100;
-    }
-    #instructions.hidden { display: none; }
-    #crosshair {
-      position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
-      transform: translate(-50%, -50%); pointer-events: none; color: #0f0;
-      font-size: 24px; line-height: 20px; text-align: center; z-index: 50; display: none;
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      color: white; background: rgba(0,0,0,0.6); padding: 12px 24px; border-radius: 8px;
+      text-align: center; user-select: none; z-index: 100; pointer-events: none;
     }
     #paste-button {
       position: absolute; top: 20px; right: 20px; z-index: 110;
@@ -36,11 +30,10 @@
 <body>
 
 <div id="instructions">
-  Click anywhere on screen to enter 3D mode<br>
-  <small>WASD = move • Q/E = down/up • Mouse = look around • ESC = release mouse</small>
-  <br><br><small>(You can paste data below without entering 3D mode)</small>
+  Left-click drag = rotate • Right-click drag = pan • Scroll = zoom
+  <br><small>(Paste data anytime — no lock needed)</small>
 </div>
-<div id="crosshair">+</div>
+
 <button id="paste-button">Paste Excel Data</button>
 
 <div id="paste-modal">
@@ -64,7 +57,7 @@
 
 <script type="module">
   import * as THREE from 'three';
-  import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
   import { FontLoader } from 'three/addons/loaders/FontLoader.js';
   import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
@@ -73,68 +66,48 @@
   scene.background = new THREE.Color(0x88aaff);
   scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
 
-  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 3000);
-  camera.position.set(80, 10, 35); // adjusted for better overview
+  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 4000);
+  camera.position.set(120, 60, 120);  // good starting view for orbit
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
   renderer.setPixelRatio(devicePixelRatio);
   document.body.appendChild(renderer.domElement);
 
-  // ─── Controls ──────────────────────────────────────────────────
-  const controls = new PointerLockControls(camera, document.body);
+  // ─── Orbit Controls (no lock needed) ───────────────────────────
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;          // smooth inertia
+  controls.dampingFactor = 0.05;
+  controls.rotateSpeed = 0.8;
+  controls.zoomSpeed = 1.2;
+  controls.panSpeed = 0.8;
+  controls.minDistance = 20;
+  controls.maxDistance = 800;
+  controls.maxPolarAngle = Math.PI / 2;   // don't go below ground
+  controls.target.set(0, 0, 0);           // look at center of yard
+  controls.update();
 
+  // Hide instructions after first interaction (optional)
+  let hasInteracted = false;
   const instructions = document.getElementById('instructions');
-  instructions.addEventListener('click', () => controls.lock());
-
-  controls.addEventListener('lock',   () => {
-    instructions.classList.add('hidden');
-    document.getElementById('crosshair').style.display = 'block';
-  });
-  controls.addEventListener('unlock', () => {
-    instructions.classList.remove('hidden');
-    document.getElementById('crosshair').style.display = 'none';
-  });
-
-  // Movement
-  const move = { forward: false, backward: false, left: false, right: false, up: false, down: false };
-  const velocity = new THREE.Vector3();
-  const direction = new THREE.Vector3();
-  let prevTime = performance.now();
-
-  document.addEventListener('keydown', e => {
-    switch (e.code) {
-      case 'KeyW': case 'ArrowUp':    move.forward  = true; break;
-      case 'KeyS': case 'ArrowDown':  move.backward = true; break;
-      case 'KeyA': case 'ArrowLeft':  move.left     = true; break;
-      case 'KeyD': case 'ArrowRight': move.right    = true; break;
-      case 'KeyE': move.up   = true; break;
-      case 'KeyQ': move.down = true; break;
+  controls.addEventListener('change', () => {
+    if (!hasInteracted) {
+      instructions.style.display = 'none';
+      hasInteracted = true;
     }
   });
 
-  document.addEventListener('keyup', e => {
-    switch (e.code) {
-      case 'KeyW': case 'ArrowUp':    move.forward  = false; break;
-      case 'KeyS': case 'ArrowDown':  move.backward = false; break;
-      case 'KeyA': case 'ArrowLeft':  move.left     = false; break;
-      case 'KeyD': case 'ArrowRight': move.right    = false; break;
-      case 'KeyE': move.up   = false; break;
-      case 'KeyQ': move.down = false; break;
-    }
-  });
-
-  // ─── Ground (only odd columns: 9,11,...,39 → 16 cells wide) ────
+  // ─── Ground & Labels ───────────────────────────────────────────
   const oddCols = [];
   for (let n = 9; n <= 39; n += 2) oddCols.push(n);
   const numOddCols = oddCols.length; // 16
   const rows = 7; // A to G
-  const cellWidth = 40; // X – numbers/columns
-  const cellDepth = 10; // Z – letters/rows
+  const cellWidth = 30;   // tuned smaller so yard isn't too stretched
+  const cellDepth = 10;
   const gridSizeX = numOddCols * cellWidth;
   const gridSizeZ = rows * cellDepth;
 
-  // Solid plane
+  // Solid plane only
   const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
   const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
   const plane = new THREE.Mesh(planeGeo, planeMat);
@@ -142,34 +115,30 @@
   plane.position.y = -0.01;
   scene.add(plane);
 
-  // Grid lines
-  const grid = new THREE.GridHelper(gridSizeX, numOddCols, 0x444466, 0xaaccff);
-  grid.material.linewidth = 2;
-  grid.position.y = 0;
-  scene.add(grid);
+  // NO GridHelper — removed as requested
 
   // ─── Labels ────────────────────────────────────────────────────
   const loader = new FontLoader();
   loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
     const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // Numbers: only odd, centered over cells
+    // Numbers (odd only, centered)
     oddCols.forEach((num, index) => {
       const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5, curveSegments: 4 });
       const mesh = new THREE.Mesh(textGeo, textMat);
       const cellCenterX = -gridSizeX / 2 + (index + 0.5) * cellWidth;
-      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 25); // further back
+      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 18);
       mesh.rotation.x = -Math.PI / 2;
       scene.add(mesh);
     });
 
-    // Letters A–G: centered over rows
+    // Letters A–G
     const letters = 'ABCDEFG'.split('');
     for (let i = 0; i < rows; i++) {
       const textGeo = new TextGeometry(letters[i], { font, size: 8, depth: 0.6, curveSegments: 4 });
       const mesh = new THREE.Mesh(textGeo, textMat);
       const cellCenterZ = -gridSizeZ / 2 + (i + 0.5) * cellDepth;
-      mesh.position.set(-gridSizeX / 2 - 40, 0.2, cellCenterZ); // further left
+      mesh.position.set(-gridSizeX / 2 - 30, 0.2, cellCenterZ);
       mesh.rotation.x = -Math.PI / 2;
       scene.add(mesh);
     }
@@ -177,7 +146,7 @@
     // Title
     const titleGeo = new TextGeometry("Y BLOCK", { font, size: 18, depth: 1.8, curveSegments: 6 });
     const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-    title.position.set(0, 30, -gridSizeZ / 2 - 70);
+    title.position.set(0, 30, -gridSizeZ / 2 - 60);
     title.rotation.x = -Math.PI / 2;
     scene.add(title);
   });
@@ -191,7 +160,7 @@
   // Containers tracking
   const containers = new Map();
 
-  // Paste modal
+  // Paste modal logic (unchanged except for better regex)
   const pasteButton = document.getElementById('paste-button');
   const pasteModal = document.getElementById('paste-modal');
   const pasteTextarea = document.getElementById('paste-textarea');
@@ -207,7 +176,7 @@
 
     const lines = data.split('\n').map(l => l.trim()).filter(l => l);
     let start = 0;
-    if (lines[0].toLowerCase().includes('container')) start = 1;
+    if (lines[0]?.toLowerCase().includes('container')) start = 1;
 
     let placedCount = 0;
 
@@ -217,7 +186,7 @@
 
       const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
-      // Super flexible regex: matches "Y11A1", "Y 11A 1", "Y_11A 1", "Y-11-A 2", with spaces around
+      // Super flexible location parse
       const locMatch = locationRaw.match(/Y\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
       if (!locMatch) {
         console.warn(`Invalid location: "${locationRaw}"`);
@@ -229,7 +198,7 @@
       const stackHeight = parseInt(locMatch[3]) || 1;
 
       if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
-        console.warn(`Skipped even/invalid column: ${rawNum} (only odd bays 9,11,...,39 allowed)`);
+        console.warn(`Skipped even/invalid column: ${rawNum}`);
         continue;
       }
 
@@ -284,33 +253,7 @@
   // ─── Animate ───────────────────────────────────────────────────
   function animate() {
     requestAnimationFrame(animate);
-
-    if (controls.isLocked) {
-      const time = performance.now();
-      const delta = (time - prevTime) / 1000;
-
-      velocity.x -= velocity.x * 8.0 * delta;
-      velocity.y -= velocity.y * 8.0 * delta;
-      velocity.z -= velocity.z * 8.0 * delta;
-
-      direction.z = Number(move.forward) - Number(move.backward);
-      direction.x = Number(move.right)   - Number(move.left);
-      direction.y = Number(move.up)      - Number(move.down);
-      direction.normalize();
-
-      const speed = 160.0;
-
-      if (move.forward || move.backward) velocity.z -= direction.z * speed * delta;
-      if (move.left    || move.right)    velocity.x -= direction.x * speed * delta;
-      if (move.up      || move.down)     velocity.y += direction.y * speed * delta;
-
-      controls.moveRight(-velocity.x * delta);
-      controls.getObject().position.y += velocity.y * delta;
-      controls.moveForward(-velocity.z * delta);
-
-      prevTime = time;
-    }
-
+    controls.update(); // required for damping
     renderer.render(scene, camera);
   }
   animate();
