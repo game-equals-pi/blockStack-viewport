@@ -47,6 +47,11 @@
       padding: 10px 20px; background: #28a745; color: white; border: none;
       border-radius: 6px; cursor: pointer;
     }
+    #save-layout-button {
+      position: absolute; top: 20px; right: 20px; z-index: 130;
+      padding: 10px 20px; background: #ffc107; color: black; border: none;
+      border-radius: 6px; cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -57,6 +62,7 @@
   <canvas id="two-d-canvas"></canvas>
   <button id="back-button">Back to 3D</button>
   <button id="add-block-button">Add New Block</button>
+  <button id="save-layout-button">Save Layout</button>
 </div>
 
 <button id="settings-button">⚙</button>
@@ -123,59 +129,77 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // Ground & Labels (Y Block fixed in 3D for now)
-  const oddCols = [];
-  for (let n = 9; n <= 39; n += 2) oddCols.push(n);
-  const numOddCols = oddCols.length;
-  const rows = 7;
-  const cellWidth = 30;
-  const cellDepth = 10;
-  const gridSizeX = numOddCols * cellWidth;
-  const gridSizeZ = rows * cellDepth;
+  // Store per-block 3D objects so we can update/remove them
+  let block3DObjects = {};
 
-  const planeGeo = new THREE.PlaneGeometry(gridSizeX, gridSizeZ);
-  const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
-  const plane = new THREE.Mesh(planeGeo, planeMat);
-  plane.rotation.x = -Math.PI / 2;
-  plane.position.y = -0.01;
-  scene.add(plane);
-
-  const loader = new FontLoader();
-  loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-    const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-    oddCols.forEach((num, index) => {
-      const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5, curveSegments: 4 });
-      const mesh = new THREE.Mesh(textGeo, textMat);
-      const cellCenterX = -gridSizeX / 2 + (index + 0.5) * cellWidth;
-      mesh.position.set(cellCenterX, 0.2, -gridSizeZ / 2 - 18);
-      mesh.rotation.x = -Math.PI / 2;
-      scene.add(mesh);
+  function update3DFrom2D() {
+    // Clear old 3D block objects
+    Object.values(block3DObjects).forEach(obj => {
+      scene.remove(obj.plane);
+      obj.labels.forEach(l => scene.remove(l));
     });
+    block3DObjects = {};
 
-    const letters = 'ABCDEFG'.split('');
-    for (let i = 0; i < rows; i++) {
-      const textGeo = new TextGeometry(letters[i], { font, size: 8, depth: 0.6, curveSegments: 4 });
-      const mesh = new THREE.Mesh(textGeo, textMat);
-      const cellCenterZ = -gridSizeZ / 2 + (i + 0.5) * cellDepth;
-      mesh.position.set(-gridSizeX / 2 - 30, 0.2, cellCenterZ);
-      mesh.rotation.x = -Math.PI / 2;
-      scene.add(mesh);
-    }
+    yardBlocks.forEach(block => {
+      const blockGroup = new THREE.Group();
 
-    const titleGeo = new TextGeometry("Y BLOCK", { font, size: 18, depth: 1.8, curveSegments: 6 });
-    const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-    title.position.set(0, 30, -gridSizeZ / 2 - 60);
-    title.rotation.x = -Math.PI / 2;
-    scene.add(title);
-  });
+      // Plane for this block
+      const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
+      const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
+      const plane = new THREE.Mesh(planeGeo, planeMat);
+      plane.rotation.x = -Math.PI / 2;
+      plane.position.y = -0.01;
+      blockGroup.add(plane);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffe0, 1.5);
-  sun.position.set(200, 400, 150);
-  scene.add(sun);
+      // Labels for this block
+      const labels = [];
+      const loader = new FontLoader();
+      loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+        const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-  // Paste modal & containers (keep your existing logic here if needed)
+        // Column numbers (odd only for Y-like blocks)
+        oddCols.forEach((num, index) => {
+          if (index >= block.columns) return;
+          const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5 });
+          const mesh = new THREE.Mesh(textGeo, textMat);
+          const cellCenterX = - (block.columns * cellWidth / 2) + (index + 0.5) * cellWidth;
+          mesh.position.set(cellCenterX, 0.2, - (block.rows * cellDepth / 2) - 18);
+          mesh.rotation.x = -Math.PI / 2;
+          blockGroup.add(mesh);
+          labels.push(mesh);
+        });
+
+        // Row letters
+        'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
+          const textGeo = new TextGeometry(letter, { font, size: 8, depth: 0.6 });
+          const mesh = new THREE.Mesh(textGeo, textMat);
+          const cellCenterZ = - (block.rows * cellDepth / 2) + (idx + 0.5) * cellDepth;
+          mesh.position.set(- (block.columns * cellWidth / 2) - 30, 0.2, cellCenterZ);
+          mesh.rotation.x = -Math.PI / 2;
+          blockGroup.add(mesh);
+          labels.push(mesh);
+        });
+
+        // Block name label above
+        const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
+        const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
+        title.position.set(0, 30, - (block.rows * cellDepth / 2) - 60);
+        title.rotation.x = -Math.PI / 2;
+        blockGroup.add(title);
+        labels.push(title);
+      });
+
+      // Position & rotate the whole block group
+      blockGroup.position.set(block.x * cellWidth, 0, block.z || 0);
+      blockGroup.rotation.y = block.rotation * Math.PI / 180;
+
+      scene.add(blockGroup);
+      block3DObjects[block.id] = { plane, labels };
+    });
+  }
+
+  // Initial update (just Y Block)
+  update3DFrom2D();
 
   // ─── 2D Yard Layout ────────────────────────────────────────────
   const twoDPage = document.getElementById('two-d-page');
@@ -189,15 +213,15 @@
   window.addEventListener('resize', resize2DCanvas);
   resize2DCanvas();
 
-  // Yard blocks data — only Y Block to start
   let yardBlocks = [
     {
       id: 1,
       name: 'Y',
       x: 0,
       y: 0,
-      columns: 16,   // 9 to 39 odd = 16 bays
-      rows: 7,       // A to G
+      z: 0,
+      columns: 16,
+      rows: 7,
       color: 'rgba(100, 150, 255, 0.5)',
       rotation: 0
     }
@@ -208,42 +232,40 @@
   let dragOffsetX = 0;
   let dragOffsetY = 0;
 
+  let camera2D = { x: 0, y: 0, zoom: 1 };
+
   function draw2DYard() {
     twoDCtx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
     twoDCtx.fillStyle = '#88aaff';
     twoDCtx.fillRect(0, 0, twoDCanvas.width, twoDCanvas.height);
 
-    const centerX = twoDCanvas.width / 2;
-    const centerY = twoDCanvas.height / 2;
-    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7; // adjust scale
-
     twoDCtx.save();
-    twoDCtx.translate(centerX, centerY);
+    twoDCtx.translate(twoDCanvas.width / 2 + camera2D.x, twoDCanvas.height / 2 + camera2D.y);
+    twoDCtx.scale(camera2D.zoom, camera2D.zoom);
+
+    const scale = 20;
 
     yardBlocks.forEach(block => {
       twoDCtx.save();
       twoDCtx.translate(block.x * scale, block.y * scale);
       twoDCtx.rotate(block.rotation * Math.PI / 180);
 
-      // Block background
       twoDCtx.fillStyle = block.color;
       twoDCtx.fillRect(-block.columns * scale / 2, -block.rows * scale / 2,
                        block.columns * scale, block.rows * scale);
 
-      // Border
       twoDCtx.strokeStyle = '#000';
       twoDCtx.lineWidth = 3;
       twoDCtx.strokeRect(-block.columns * scale / 2, -block.rows * scale / 2,
                          block.columns * scale, block.rows * scale);
 
-      // Name label in center
       twoDCtx.fillStyle = 'white';
       twoDCtx.font = 'bold 24px Arial';
       twoDCtx.textAlign = 'center';
       twoDCtx.textBaseline = 'middle';
       twoDCtx.fillText(block.name + ' Block', 0, 0);
 
-      // Internal grid lines (scaled)
+      // Internal grid
       twoDCtx.strokeStyle = '#aaccff';
       twoDCtx.lineWidth = 1;
       for (let i = 1; i < block.columns; i++) {
@@ -267,90 +289,130 @@
     twoDCtx.restore();
   }
 
-  // Dragging logic
-  twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
+  // ─── 2D Controls: Zoom & Pan ───────────────────────────────────
+  twoDCanvas.addEventListener('wheel', e => {
+    e.preventDefault();
     const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+    const mouseX = e.clientX - rect.left - twoDCanvas.width / 2;
+    const mouseY = e.clientY - rect.top - twoDCanvas.height / 2;
 
-    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7;
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+    const oldZoom = camera2D.zoom;
+    camera2D.zoom *= zoomFactor;
 
-    selectedBlock = null;
-    for (let i = yardBlocks.length - 1; i >= 0; i--) {
-      const b = yardBlocks[i];
-      const left = b.x * scale - (b.columns * scale / 2);
-      const right = b.x * scale + (b.columns * scale / 2);
-      const top = b.y * scale - (b.rows * scale / 2);
-      const bottom = b.y * scale + (b.rows * scale / 2);
+    // Zoom toward mouse
+    camera2D.x = mouseX - (mouseX - camera2D.x) * (camera2D.zoom / oldZoom);
+    camera2D.y = mouseY - (mouseY - camera2D.y) * (camera2D.zoom / oldZoom);
 
-      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
-        selectedBlock = b;
-        isDragging = true;
-        dragOffsetX = mouseX - b.x * scale;
-        dragOffsetY = mouseY - b.y * scale;
-        break;
-      }
+    draw2DYard();
+  });
+
+  let isPanning = false;
+  let panStartX = 0, panStartY = 0;
+
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button === 1) { // middle mouse
+      isPanning = true;
+      panStartX = e.clientX - camera2D.x;
+      panStartY = e.clientY - camera2D.y;
+      twoDCanvas.style.cursor = 'grabbing';
     }
   });
 
   twoDCanvas.addEventListener('mousemove', e => {
-    if (!isDragging || !selectedBlock) return;
-    const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
-
-    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7;
-
-    selectedBlock.x = (mouseX - dragOffsetX) / scale;
-    selectedBlock.y = (mouseY - dragOffsetY) / scale;
-    draw2DYard();
-  });
-
-  twoDCanvas.addEventListener('mouseup', () => isDragging = false);
-  twoDCanvas.addEventListener('mouseleave', () => isDragging = false);
-
-  // Right-click context menu
-  twoDCanvas.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
-
-    const scale = Math.min(twoDCanvas.width / (yardBlocks[0].columns * 50), twoDCanvas.height / (yardBlocks[0].rows * 50)) * 0.7;
-
-    let clickedBlock = null;
-    for (let i = yardBlocks.length - 1; i >= 0; i--) {
-      const b = yardBlocks[i];
-      const left = b.x * scale - (b.columns * scale / 2);
-      const right = b.x * scale + (b.columns * scale / 2);
-      const top = b.y * scale - (b.rows * scale / 2);
-      const bottom = b.y * scale + (b.rows * scale / 2);
-
-      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
-        clickedBlock = b;
-        break;
-      }
-    }
-
-    if (clickedBlock) {
-      const choice = prompt(`Actions for "${clickedBlock.name} Block":\n1 = Delete\n2 = Rotate 90°\nEnter number:`);
-      if (choice === '1') {
-        yardBlocks = yardBlocks.filter(b => b !== clickedBlock);
-        draw2DYard();
-      } else if (choice === '2') {
-        const temp = clickedBlock.columns;
-        clickedBlock.columns = clickedBlock.rows;
-        clickedBlock.rows = temp;
-        clickedBlock.rotation = (clickedBlock.rotation + 90) % 360;
-        draw2DYard();
-      }
+    if (isPanning) {
+      camera2D.x = e.clientX - panStartX;
+      camera2D.y = e.clientY - panStartY;
+      draw2DYard();
     }
   });
 
-  // Add New Block
-  const addBlockBtn = document.getElementById('add-block-button');
-  addBlockBtn.addEventListener('click', () => {
+  twoDCanvas.addEventListener('mouseup', e => {
+    if (e.button === 1) {
+      isPanning = false;
+      twoDCanvas.style.cursor = 'default';
+    }
+  });
+
+  // ─── Save Layout to 3D ─────────────────────────────────────────
+  document.getElementById('save-layout-button').addEventListener('click', () => {
+    update3DFrom2D();
+    alert('Layout saved to 3D view!');
+  });
+
+  function update3DFrom2D() {
+    // Remove old block objects
+    Object.values(block3DObjects).forEach(obj => {
+      scene.remove(obj.plane);
+      obj.labels.forEach(l => scene.remove(l));
+    });
+    block3DObjects = {};
+
+    const loader = new FontLoader();
+    loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+      const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+      yardBlocks.forEach(block => {
+        const blockGroup = new THREE.Group();
+
+        // Plane
+        const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
+        const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -0.01;
+        blockGroup.add(plane);
+
+        // Labels (per block)
+        const labels = [];
+
+        // Column numbers (every other for simplicity, or full if you want)
+        for (let i = 0; i < block.columns; i += 2) {
+          const num = 9 + i * 2; // adjust if needed
+          if (num > 39) break;
+          const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5 });
+          const mesh = new THREE.Mesh(textGeo, textMat);
+          const cellCenterX = - (block.columns * cellWidth / 2) + (i + 0.5) * cellWidth;
+          mesh.position.set(cellCenterX, 0.2, - (block.rows * cellDepth / 2) - 18);
+          mesh.rotation.x = -Math.PI / 2;
+          blockGroup.add(mesh);
+          labels.push(mesh);
+        }
+
+        // Row letters
+        'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
+          const textGeo = new TextGeometry(letter, { font, size: 8, depth: 0.6 });
+          const mesh = new THREE.Mesh(textGeo, textMat);
+          const cellCenterZ = - (block.rows * cellDepth / 2) + (idx + 0.5) * cellDepth;
+          mesh.position.set(- (block.columns * cellWidth / 2) - 30, 0.2, cellCenterZ);
+          mesh.rotation.x = -Math.PI / 2;
+          blockGroup.add(mesh);
+          labels.push(mesh);
+        });
+
+        // Block name
+        const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
+        const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
+        title.position.set(0, 30, - (block.rows * cellDepth / 2) - 60);
+        title.rotation.x = -Math.PI / 2;
+        blockGroup.add(title);
+        labels.push(title);
+
+        // Position & rotate
+        blockGroup.position.set(block.x * cellWidth, 0, block.z || 0);
+        blockGroup.rotation.y = block.rotation * Math.PI / 180;
+
+        scene.add(blockGroup);
+        block3DObjects[block.id] = { plane, labels };
+      });
+    });
+  }
+
+  // Initial 3D update
+  update3DFrom2D();
+
+  // ─── Add New Block ─────────────────────────────────────────────
+  document.getElementById('add-block-button').addEventListener('click', () => {
     const name = prompt('Block name (e.g. X, Z):', 'NewBlock');
     if (!name) return;
 
@@ -366,6 +428,7 @@
       name,
       x: 0,
       y: 0,
+      z: 0,
       columns,
       rows,
       color: `rgba(${Math.random()*150+100}, ${Math.random()*150+100}, ${Math.random()*150+100}, 0.5)`,
@@ -375,18 +438,7 @@
     draw2DYard();
   });
 
-  // Draw when entering 2D
-  document.getElementById('yard-layout-button').addEventListener('click', () => {
-    twoDPage.style.display = 'block';
-    draw2DYard();
-    settingsMenu.style.display = 'none';
-  });
-
-  document.getElementById('back-button').addEventListener('click', () => {
-    twoDPage.style.display = 'none';
-  });
-
-  // ─── Settings menu toggle ──────────────────────────────────────
+  // ─── Settings & Navigation ─────────────────────────────────────
   const settingsButton = document.getElementById('settings-button');
   const settingsMenu = document.getElementById('settings-menu');
 
@@ -400,6 +452,16 @@
     }
   });
 
+  document.getElementById('yard-layout-button').addEventListener('click', () => {
+    twoDPage.style.display = 'block';
+    draw2DYard();
+    settingsMenu.style.display = 'none';
+  });
+
+  document.getElementById('back-button').addEventListener('click', () => {
+    twoDPage.style.display = 'none';
+  });
+
   // ─── Animate ───────────────────────────────────────────────────
   function animate() {
     requestAnimationFrame(animate);
@@ -408,5 +470,3 @@
   }
   animate();
 </script>
-</body>
-</html>
