@@ -285,13 +285,27 @@
     }
   });
 
-  twoDCanvas.addEventListener('mousemove', e => {
-    if (isPanning) {
-      camera2D.x = e.clientX - panStartX;
-      camera2D.y = e.clientY - panStartY;
-      draw2DYard();
-    }
-  });
+twoDCanvas.addEventListener('mousemove', e => {
+  if (!isDragging || !selectedBlock) return;
+
+  const rect = twoDCanvas.getBoundingClientRect();
+  let mouseCenterX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+  let mouseCenterY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+
+  // Same conversion as in mousedown
+  let mouseWorldX = (mouseCenterX - camera2D.x) / camera2D.zoom;
+  let mouseWorldY = (mouseCenterY - camera2D.y) / camera2D.zoom;
+
+  // Update block position in world space
+  selectedBlock.x = mouseWorldX - dragOffsetX;
+  selectedBlock.y = mouseWorldY - dragOffsetY;
+
+  draw2DYard();
+
+  // Optional: log during drag to see live movement
+  console.log('Drag update - world mouse:', mouseWorldX.toFixed(2), mouseWorldY.toFixed(2),
+              '→ new block pos:', selectedBlock.x.toFixed(2), selectedBlock.y.toFixed(2));
+});
 
   twoDCanvas.addEventListener('mouseup', e => {
     if (e.button === 1) {
