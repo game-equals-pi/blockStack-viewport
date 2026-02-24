@@ -262,6 +262,53 @@
     const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
     const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
+    // ─── Block Dragging ────────────────────────────────────────────
+twoDCanvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+
+  const rect = twoDCanvas.getBoundingClientRect();
+  let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+  let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+
+  // Convert to world space
+  mouseX = (mouseX - camera2D.x) / camera2D.zoom;
+  mouseY = (mouseY - camera2D.y) / camera2D.zoom;
+
+  // ─── DEBUG OUTPUT ─────────────────────────────────────────────
+  console.log('Mouse click (screen):', e.clientX, e.clientY);
+  console.log('Mouse in canvas space:', mouseX + twoDCanvas.width / 2, mouseY + twoDCanvas.height / 2);
+  console.log('Mouse in world space (used for hit test):', mouseX.toFixed(2), mouseY.toFixed(2));
+
+  // Show all block positions for comparison
+  yardBlocks.forEach(b => {
+    console.log(`Block ${b.name}: x=${b.x.toFixed(2)}, y=${b.y.toFixed(2)}, w/2=${(b.columns*10).toFixed(2)}, h/2=${(b.rows*10).toFixed(2)}`);
+  });
+
+  selectedBlock = null;
+  for (let i = yardBlocks.length - 1; i >= 0; i--) {
+    const b = yardBlocks[i];
+    const halfW = b.columns * 10;
+    const halfH = b.rows * 10;
+
+    const isHit = mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
+                  mouseY >= b.y - halfH && mouseY <= b.y + halfH;
+
+    console.log(`Checking ${b.name}: hit = ${isHit} (mouse ${mouseX.toFixed(2)},${mouseY.toFixed(2)} vs ${b.x-halfW}..${b.x+halfW}, ${b.y-halfH}..${b.y+halfH})`);
+
+    if (isHit) {
+      selectedBlock = b;
+      isDragging = true;
+      dragOffsetX = mouseX - b.x;
+      dragOffsetY = mouseY - b.y;
+      console.log('HIT! Selected block:', b.name, 'offset:', dragOffsetX, dragOffsetY);
+      break;
+    }
+  }
+
+  if (!selectedBlock) {
+    console.log('No block hit');
+  }
+});
     const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
     const oldZoom = camera2D.zoom;
     camera2D.zoom *= zoomFactor;
