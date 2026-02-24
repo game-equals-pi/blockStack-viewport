@@ -9,49 +9,17 @@
     #three-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; }
     #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
     #two-d-canvas { width: 100%; height: 100%; display: block; cursor: default; pointer-events: auto; }
-    #settings-button {
-      position: absolute; top: 20px; left: 20px; z-index: 130;
-      padding: 10px; background: #333; color: white; border: none;
-      border-radius: 50%; cursor: pointer; font-size: 20px;
-    }
-    #settings-menu {
-      position: absolute; top: 60px; left: 20px; z-index: 130;
-      background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;
-      display: none; color: white;
-    }
-    #settings-menu button {
-      display: block; width: 100%; padding: 10px; margin: 5px 0;
-      background: #007bff; color: white; border: none; cursor: pointer;
-    }
-    #paste-button {
-      position: absolute; top: 20px; right: 20px; z-index: 130;
-      padding: 12px 24px; background: #007bff; color: white; border: none;
-      border-radius: 6px; cursor: pointer; font-size: 16px;
-    }
+    #settings-button { position: absolute; top: 20px; left: 20px; z-index: 130; padding: 10px; background: #333; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 20px; }
+    #settings-menu { position: absolute; top: 60px; left: 20px; z-index: 130; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; display: none; color: white; }
+    #settings-menu button { display: block; width: 100%; padding: 10px; margin: 5px 0; background: #007bff; color: white; border: none; cursor: pointer; }
+    #paste-button { position: absolute; top: 20px; right: 20px; z-index: 130; padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
     #paste-button:hover { background: #0056b3; }
-    #paste-modal {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.95); padding: 25px; border-radius: 10px;
-      width: 420px; max-width: 90%; z-index: 140; display: none; text-align: center;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    }
+    #paste-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.95); padding: 25px; border-radius: 10px; width: 420px; max-width: 90%; z-index: 140; display: none; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
     #paste-textarea { width: 100%; height: 220px; margin: 15px 0; font-family: monospace; }
     #submit-paste, #close-modal { padding: 10px 20px; margin: 8px; cursor: pointer; font-size: 14px; }
-    #back-button {
-      position: absolute; top: 20px; left: 20px; z-index: 130;
-      padding: 10px 20px; background: #007bff; color: white; border: none;
-      border-radius: 6px; cursor: pointer;
-    }
-    #add-block-button {
-      position: absolute; top: 70px; left: 20px; z-index: 130;
-      padding: 10px 20px; background: #28a745; color: white; border: none;
-      border-radius: 6px; cursor: pointer;
-    }
-    #save-layout-button {
-      position: absolute; top: 20px; right: 150px; z-index: 130;
-      padding: 12px 24px; background: #ffc107; color: black; border: none;
-      border-radius: 6px; cursor: pointer; font-weight: bold;
-    }
+    #back-button { position: absolute; top: 20px; left: 20px; z-index: 130; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    #add-block-button { position: absolute; top: 70px; left: 20px; z-index: 130; padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    #save-layout-button { position: absolute; top: 20px; right: 150px; z-index: 130; padding: 12px 24px; background: #ffc107; color: black; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -129,7 +97,7 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // ─── Yard Variables ────────────────────────────────────────────
+  // ─── Shared Yard Variables ─────────────────────────────────────
   const oddCols = [];
   for (let n = 9; n <= 39; n += 2) oddCols.push(n);
   const cellWidth = 30;
@@ -151,6 +119,7 @@
       yardBlocks.forEach(block => {
         const blockGroup = new THREE.Group();
 
+        // Plane
         const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
         const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
         const plane = new THREE.Mesh(planeGeo, planeMat);
@@ -158,6 +127,7 @@
         plane.position.y = -0.01;
         blockGroup.add(plane);
 
+        // Labels
         const labels = [];
 
         for (let i = 0; i < block.columns; i += 2) {
@@ -189,7 +159,8 @@
         blockGroup.add(title);
         labels.push(title);
 
-        blockGroup.position.set(block.x * cellWidth, 0, block.z || 0);
+        // Apply position and rotation
+        blockGroup.position.set(block.x * cellWidth, 0, block.y * cellDepth);  // y in 2D → Z in 3D
         blockGroup.rotation.y = block.rotation * Math.PI / 180;
 
         scene.add(blockGroup);
@@ -332,22 +303,22 @@
     }
   });
 
-  // ─── Block Dragging ────────────────────────────────────────────
+  // ─── Block Dragging & Selection ────────────────────────────────
   twoDCanvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     const rect = twoDCanvas.getBoundingClientRect();
     let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
     let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    // Adjust for current camera pan & zoom
-    mouseX = mouseX / camera2D.zoom;
-    mouseY = mouseY / camera2D.zoom;
+    // Reverse zoom and pan for hit test
+    mouseX = mouseX / camera2D.zoom - camera2D.x / camera2D.zoom;
+    mouseY = mouseY / camera2D.zoom - camera2D.y / camera2D.zoom;
 
     selectedBlock = null;
     for (let i = yardBlocks.length - 1; i >= 0; i--) {
       const b = yardBlocks[i];
-      const halfW = b.columns * 20 / 2;
-      const halfH = b.rows * 20 / 2;
+      const halfW = b.columns * 10;
+      const halfH = b.rows * 10;
       if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
           mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
         selectedBlock = b;
@@ -365,8 +336,8 @@
     let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
     let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    mouseX = mouseX / camera2D.zoom;
-    mouseY = mouseY / camera2D.zoom;
+    mouseX = mouseX / camera2D.zoom - camera2D.x / camera2D.zoom;
+    mouseY = mouseY / camera2D.zoom - camera2D.y / camera2D.zoom;
 
     selectedBlock.x = mouseX - dragOffsetX;
     selectedBlock.y = mouseY - dragOffsetY;
@@ -385,14 +356,14 @@
     let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
     let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    mouseX = mouseX / camera2D.zoom;
-    mouseY = mouseY / camera2D.zoom;
+    mouseX = mouseX / camera2D.zoom - camera2D.x / camera2D.zoom;
+    mouseY = mouseY / camera2D.zoom - camera2D.y / camera2D.zoom;
 
     let clickedBlock = null;
     for (let i = yardBlocks.length - 1; i >= 0; i--) {
       const b = yardBlocks[i];
-      const halfW = b.columns * 20 / 2;
-      const halfH = b.rows * 20 / 2;
+      const halfW = b.columns * 10;
+      const halfH = b.rows * 10;
       if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
           mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
         clickedBlock = b;
@@ -401,7 +372,7 @@
     }
 
     if (clickedBlock) {
-      const action = prompt(`"${clickedBlock.name} Block":\n1 = Delete\n2 = Rotate 90°\nEnter number (or cancel):`);
+      const action = prompt(`"${clickedBlock.name} Block":\n1 = Delete\n2 = Rotate 90°\nEnter number:`);
       if (action === '1') {
         yardBlocks = yardBlocks.filter(b => b !== clickedBlock);
         draw2DYard();
@@ -418,7 +389,7 @@
   // ─── Save Layout ───────────────────────────────────────────────
   document.getElementById('save-layout-button').addEventListener('click', () => {
     update3DFrom2D();
-    alert('Layout saved! 3D now shows separate blocks with updated positions/rotations.');
+    alert('Layout saved! 3D view updated with separate blocks.');
   });
 
   // ─── Add New Block ─────────────────────────────────────────────
