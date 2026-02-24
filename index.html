@@ -157,7 +157,7 @@
         blockGroup.add(title);
         labels.push(title);
 
-        blockGroup.position.set(block.x * cellWidth, 0, block.y * cellDepth); // 2D y → 3D Z
+        blockGroup.position.set(block.x * cellWidth, 0, block.y * cellDepth);
         blockGroup.rotation.y = block.rotation * Math.PI / 180;
 
         scene.add(blockGroup);
@@ -300,14 +300,14 @@
     }
   });
 
-  // ─── Block Dragging ────────────────────────────────────────────
+  // ─── Block Dragging (fixed world-space) ────────────────────────
   twoDCanvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     const rect = twoDCanvas.getBoundingClientRect();
     let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
     let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    // Convert screen → world
+    // Convert to world space
     mouseX = (mouseX - camera2D.x) / camera2D.zoom;
     mouseY = (mouseY - camera2D.y) / camera2D.zoom;
 
@@ -439,9 +439,7 @@
       const x = index * cellWidth - (16 * cellWidth / 2) + cellWidth / 2;
       const z = letIdx * cellDepth - (7 * cellDepth / 2) + cellDepth / 2;
 
-      // For now, place in global space (later we can assign to specific block)
-      // const contMesh = ... (your existing container creation code here)
-
+      // TODO: place container in correct block based on location prefix (later step)
       placedCount++;
     }
 
