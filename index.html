@@ -262,7 +262,46 @@
     const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
     const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    // ─── Block Dragging ────────────────────────────────────────────
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+    const oldZoom = camera2D.zoom;
+    camera2D.zoom *= zoomFactor;
+
+    camera2D.x = mouseX - (mouseX - camera2D.x) * (camera2D.zoom / oldZoom);
+    camera2D.y = mouseY - (mouseY - camera2D.y) * (camera2D.zoom / oldZoom);
+
+    draw2DYard();
+  });
+
+  let isPanning = false;
+  let panStartX = 0, panStartY = 0;
+
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button === 1) {
+      isPanning = true;
+      panStartX = e.clientX - camera2D.x;
+      panStartY = e.clientY - camera2D.y;
+      twoDCanvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+  });
+
+  twoDCanvas.addEventListener('mousemove', e => {
+    if (isPanning) {
+      camera2D.x = e.clientX - panStartX;
+      camera2D.y = e.clientY - panStartY;
+      draw2DYard();
+    }
+  });
+
+  twoDCanvas.addEventListener('mouseup', e => {
+    if (e.button === 1) {
+      isPanning = false;
+      twoDCanvas.style.cursor = 'default';
+    }
+  });
+
+  // ─── Block Dragging ────────────────────────────────────────────
+  // ─── Block Dragging ────────────────────────────────────────────
 twoDCanvas.addEventListener('mousedown', e => {
   if (e.button !== 0) return;
 
@@ -309,88 +348,6 @@ twoDCanvas.addEventListener('mousedown', e => {
     console.log('No block hit');
   }
 });
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-    const oldZoom = camera2D.zoom;
-    camera2D.zoom *= zoomFactor;
-
-    camera2D.x = mouseX - (mouseX - camera2D.x) * (camera2D.zoom / oldZoom);
-    camera2D.y = mouseY - (mouseY - camera2D.y) * (camera2D.zoom / oldZoom);
-
-    draw2DYard();
-  });
-
-  let isPanning = false;
-  let panStartX = 0, panStartY = 0;
-
-  twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button === 1) {
-      isPanning = true;
-      panStartX = e.clientX - camera2D.x;
-      panStartY = e.clientY - camera2D.y;
-      twoDCanvas.style.cursor = 'grabbing';
-      e.preventDefault();
-    }
-  });
-
-  twoDCanvas.addEventListener('mousemove', e => {
-    if (isPanning) {
-      camera2D.x = e.clientX - panStartX;
-      camera2D.y = e.clientY - panStartY;
-      draw2DYard();
-    }
-  });
-
-  twoDCanvas.addEventListener('mouseup', e => {
-    if (e.button === 1) {
-      isPanning = false;
-      twoDCanvas.style.cursor = 'default';
-    }
-  });
-
-  // ─── Block Dragging ────────────────────────────────────────────
-  twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-    const rect = twoDCanvas.getBoundingClientRect();
-    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2 - camera2D.x;
-    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2 - camera2D.y;
-
-    mouseX /= camera2D.zoom;
-    mouseY /= camera2D.zoom;
-
-    selectedBlock = null;
-    for (let i = yardBlocks.length - 1; i >= 0; i--) {
-      const b = yardBlocks[i];
-      const halfW = b.columns * 10;
-      const halfH = b.rows * 10;
-      if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
-          mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
-        selectedBlock = b;
-        isDragging = true;
-        dragOffsetX = mouseX - b.x;
-        dragOffsetY = mouseY - b.y;
-        break;
-      }
-    }
-  });
-
-  twoDCanvas.addEventListener('mousemove', e => {
-    if (!isDragging || !selectedBlock) return;
-    const rect = twoDCanvas.getBoundingClientRect();
-    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2 - camera2D.x;
-    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2 - camera2D.y;
-
-    mouseX /= camera2D.zoom;
-    mouseY /= camera2D.zoom;
-
-    selectedBlock.x = mouseX - dragOffsetX;
-    selectedBlock.y = mouseY - dragOffsetY;
-    draw2DYard();
-  });
-
-  twoDCanvas.addEventListener('mouseup', () => {
-    isDragging = false;
-    selectedBlock = null;
-  });
 
   // ─── Right-click Delete/Rotate ─────────────────────────────────
   twoDCanvas.addEventListener('contextmenu', e => {
