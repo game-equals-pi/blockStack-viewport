@@ -8,14 +8,14 @@
     body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
     #three-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; }
     #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
-    #two-d-canvas { width: 100%; height: 100%; display: block; cursor: default; }
+    #two-d-canvas { width: 100%; height: 100%; display: block; cursor: default; pointer-events: auto; }
     #settings-button {
-      position: absolute; top: 20px; left: 20px; z-index: 110;
+      position: absolute; top: 20px; left: 20px; z-index: 130;
       padding: 10px; background: #333; color: white; border: none;
       border-radius: 50%; cursor: pointer; font-size: 20px;
     }
     #settings-menu {
-      position: absolute; top: 60px; left: 20px; z-index: 110;
+      position: absolute; top: 60px; left: 20px; z-index: 130;
       background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px;
       display: none; color: white;
     }
@@ -24,7 +24,7 @@
       background: #007bff; color: white; border: none; cursor: pointer;
     }
     #paste-button {
-      position: absolute; top: 20px; right: 20px; z-index: 110;
+      position: absolute; top: 20px; right: 20px; z-index: 130;
       padding: 12px 24px; background: #007bff; color: white; border: none;
       border-radius: 6px; cursor: pointer; font-size: 16px;
     }
@@ -32,7 +32,7 @@
     #paste-modal {
       position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
       background: rgba(255,255,255,0.95); padding: 25px; border-radius: 10px;
-      width: 420px; max-width: 90%; z-index: 120; display: none; text-align: center;
+      width: 420px; max-width: 90%; z-index: 140; display: none; text-align: center;
       box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
     #paste-textarea { width: 100%; height: 220px; margin: 15px 0; font-family: monospace; }
@@ -129,17 +129,15 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // ─── Yard Variables (shared) ───────────────────────────────────
+  // ─── Yard Variables ────────────────────────────────────────────
   const oddCols = [];
   for (let n = 9; n <= 39; n += 2) oddCols.push(n);
   const cellWidth = 30;
   const cellDepth = 10;
 
-  // Store per-block 3D objects
   let block3DObjects = {};
 
   function update3DFrom2D() {
-    // Clear old blocks
     Object.values(block3DObjects).forEach(obj => {
       scene.remove(obj.plane);
       obj.labels.forEach(l => scene.remove(l));
@@ -153,7 +151,6 @@
       yardBlocks.forEach(block => {
         const blockGroup = new THREE.Group();
 
-        // Plane
         const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
         const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
         const plane = new THREE.Mesh(planeGeo, planeMat);
@@ -161,10 +158,8 @@
         plane.position.y = -0.01;
         blockGroup.add(plane);
 
-        // Labels
         const labels = [];
 
-        // Column numbers
         for (let i = 0; i < block.columns; i += 2) {
           const num = 9 + i * 2;
           if (num > 39) break;
@@ -177,7 +172,6 @@
           labels.push(mesh);
         }
 
-        // Row letters
         'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
           const textGeo = new TextGeometry(letter, { font, size: 8, depth: 0.6 });
           const mesh = new THREE.Mesh(textGeo, textMat);
@@ -188,7 +182,6 @@
           labels.push(mesh);
         });
 
-        // Block name
         const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
         const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
         title.position.set(0, 30, - (block.rows * cellDepth / 2) - 60);
@@ -196,7 +189,6 @@
         blockGroup.add(title);
         labels.push(title);
 
-        // Position & rotate
         blockGroup.position.set(block.x * cellWidth, 0, block.z || 0);
         blockGroup.rotation.y = block.rotation * Math.PI / 180;
 
@@ -206,7 +198,6 @@
     });
   }
 
-  // Initial 3D update
   update3DFrom2D();
 
   // ─── 2D Yard Layout ────────────────────────────────────────────
@@ -296,7 +287,7 @@
     twoDCtx.restore();
   }
 
-  // ─── 2D Controls ───────────────────────────────────────────────
+  // ─── Mouse Controls ────────────────────────────────────────────
   twoDCanvas.addEventListener('wheel', e => {
     e.preventDefault();
     const rect = twoDCanvas.getBoundingClientRect();
@@ -317,7 +308,7 @@
   let panStartX = 0, panStartY = 0;
 
   twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button === 1) {
+    if (e.button === 1) { // middle mouse for pan
       isPanning = true;
       panStartX = e.clientX - camera2D.x;
       panStartY = e.clientY - camera2D.y;
@@ -340,10 +331,92 @@
     }
   });
 
+  // ─── Block Interaction ─────────────────────────────────────────
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return; // left click only for drag
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+
+    const scale = 20;
+
+    selectedBlock = null;
+    for (let i = yardBlocks.length - 1; i >= 0; i--) {
+      const b = yardBlocks[i];
+      const left = b.x * scale - (b.columns * scale / 2);
+      const right = b.x * scale + (b.columns * scale / 2);
+      const top = b.y * scale - (b.rows * scale / 2);
+      const bottom = b.y * scale + (b.rows * scale / 2);
+
+      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+        selectedBlock = b;
+        isDragging = true;
+        dragOffsetX = mouseX - b.x * scale;
+        dragOffsetY = mouseY - b.y * scale;
+        break;
+      }
+    }
+  });
+
+  twoDCanvas.addEventListener('mousemove', e => {
+    if (!isDragging || !selectedBlock) return;
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+
+    const scale = 20;
+
+    selectedBlock.x = (mouseX - dragOffsetX) / scale;
+    selectedBlock.y = (mouseY - dragOffsetY) / scale;
+    draw2DYard();
+  });
+
+  twoDCanvas.addEventListener('mouseup', () => {
+    isDragging = false;
+    selectedBlock = null;
+  });
+
+  // Right-click
+  twoDCanvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+
+    const scale = 20;
+
+    let clickedBlock = null;
+    for (let i = yardBlocks.length - 1; i >= 0; i--) {
+      const b = yardBlocks[i];
+      const left = b.x * scale - (b.columns * scale / 2);
+      const right = b.x * scale + (b.columns * scale / 2);
+      const top = b.y * scale - (b.rows * scale / 2);
+      const bottom = b.y * scale + (b.rows * scale / 2);
+
+      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+        clickedBlock = b;
+        break;
+      }
+    }
+
+    if (clickedBlock) {
+      if (confirm(`Delete "${clickedBlock.name} Block"?`)) {
+        yardBlocks = yardBlocks.filter(b => b !== clickedBlock);
+        draw2DYard();
+      } else if (confirm(`Rotate "${clickedBlock.name} Block" 90°?`)) {
+        const temp = clickedBlock.columns;
+        clickedBlock.columns = clickedBlock.rows;
+        clickedBlock.rows = temp;
+        clickedBlock.rotation = (clickedBlock.rotation + 90) % 360;
+        draw2DYard();
+      }
+    }
+  });
+
   // ─── Save Layout ───────────────────────────────────────────────
   document.getElementById('save-layout-button').addEventListener('click', () => {
     update3DFrom2D();
-    alert('Layout saved to 3D view — each block separate!');
+    alert('Layout saved! 3D view now shows separate blocks.');
   });
 
   // ─── Add New Block ─────────────────────────────────────────────
