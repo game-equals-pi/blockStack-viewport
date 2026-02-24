@@ -129,45 +129,53 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // Store per-block 3D objects so we can update/remove them
+  // ─── Yard Variables (shared) ───────────────────────────────────
+  const oddCols = [];
+  for (let n = 9; n <= 39; n += 2) oddCols.push(n);
+  const cellWidth = 30;
+  const cellDepth = 10;
+
+  // Store per-block 3D objects
   let block3DObjects = {};
 
   function update3DFrom2D() {
-    // Clear old 3D block objects
+    // Clear old blocks
     Object.values(block3DObjects).forEach(obj => {
       scene.remove(obj.plane);
       obj.labels.forEach(l => scene.remove(l));
     });
     block3DObjects = {};
 
-    yardBlocks.forEach(block => {
-      const blockGroup = new THREE.Group();
+    const loader = new FontLoader();
+    loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+      const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-      // Plane for this block
-      const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
-      const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
-      const plane = new THREE.Mesh(planeGeo, planeMat);
-      plane.rotation.x = -Math.PI / 2;
-      plane.position.y = -0.01;
-      blockGroup.add(plane);
+      yardBlocks.forEach(block => {
+        const blockGroup = new THREE.Group();
 
-      // Labels for this block
-      const labels = [];
-      const loader = new FontLoader();
-      loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-        const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        // Plane
+        const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
+        const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -0.01;
+        blockGroup.add(plane);
 
-        // Column numbers (odd only for Y-like blocks)
-        oddCols.forEach((num, index) => {
-          if (index >= block.columns) return;
+        // Labels
+        const labels = [];
+
+        // Column numbers
+        for (let i = 0; i < block.columns; i += 2) {
+          const num = 9 + i * 2;
+          if (num > 39) break;
           const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5 });
           const mesh = new THREE.Mesh(textGeo, textMat);
-          const cellCenterX = - (block.columns * cellWidth / 2) + (index + 0.5) * cellWidth;
+          const cellCenterX = - (block.columns * cellWidth / 2) + (i + 0.5) * cellWidth;
           mesh.position.set(cellCenterX, 0.2, - (block.rows * cellDepth / 2) - 18);
           mesh.rotation.x = -Math.PI / 2;
           blockGroup.add(mesh);
           labels.push(mesh);
-        });
+        }
 
         // Row letters
         'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
@@ -180,25 +188,25 @@
           labels.push(mesh);
         });
 
-        // Block name label above
+        // Block name
         const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
         const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
         title.position.set(0, 30, - (block.rows * cellDepth / 2) - 60);
         title.rotation.x = -Math.PI / 2;
         blockGroup.add(title);
         labels.push(title);
+
+        // Position & rotate
+        blockGroup.position.set(block.x * cellWidth, 0, block.z || 0);
+        blockGroup.rotation.y = block.rotation * Math.PI / 180;
+
+        scene.add(blockGroup);
+        block3DObjects[block.id] = { plane, labels };
       });
-
-      // Position & rotate the whole block group
-      blockGroup.position.set(block.x * cellWidth, 0, block.z || 0);
-      blockGroup.rotation.y = block.rotation * Math.PI / 180;
-
-      scene.add(blockGroup);
-      block3DObjects[block.id] = { plane, labels };
     });
   }
 
-  // Initial update (just Y Block)
+  // Initial 3D update
   update3DFrom2D();
 
   // ─── 2D Yard Layout ────────────────────────────────────────────
@@ -265,7 +273,6 @@
       twoDCtx.textBaseline = 'middle';
       twoDCtx.fillText(block.name + ' Block', 0, 0);
 
-      // Internal grid
       twoDCtx.strokeStyle = '#aaccff';
       twoDCtx.lineWidth = 1;
       for (let i = 1; i < block.columns; i++) {
@@ -289,7 +296,7 @@
     twoDCtx.restore();
   }
 
-  // ─── 2D Controls: Zoom & Pan ───────────────────────────────────
+  // ─── 2D Controls ───────────────────────────────────────────────
   twoDCanvas.addEventListener('wheel', e => {
     e.preventDefault();
     const rect = twoDCanvas.getBoundingClientRect();
@@ -300,7 +307,6 @@
     const oldZoom = camera2D.zoom;
     camera2D.zoom *= zoomFactor;
 
-    // Zoom toward mouse
     camera2D.x = mouseX - (mouseX - camera2D.x) * (camera2D.zoom / oldZoom);
     camera2D.y = mouseY - (mouseY - camera2D.y) * (camera2D.zoom / oldZoom);
 
@@ -311,7 +317,7 @@
   let panStartX = 0, panStartY = 0;
 
   twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button === 1) { // middle mouse
+    if (e.button === 1) {
       isPanning = true;
       panStartX = e.clientX - camera2D.x;
       panStartY = e.clientY - camera2D.y;
@@ -334,82 +340,11 @@
     }
   });
 
-  // ─── Save Layout to 3D ─────────────────────────────────────────
+  // ─── Save Layout ───────────────────────────────────────────────
   document.getElementById('save-layout-button').addEventListener('click', () => {
     update3DFrom2D();
-    alert('Layout saved to 3D view!');
+    alert('Layout saved to 3D view — each block separate!');
   });
-
-  function update3DFrom2D() {
-    // Remove old block objects
-    Object.values(block3DObjects).forEach(obj => {
-      scene.remove(obj.plane);
-      obj.labels.forEach(l => scene.remove(l));
-    });
-    block3DObjects = {};
-
-    const loader = new FontLoader();
-    loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-      const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-      yardBlocks.forEach(block => {
-        const blockGroup = new THREE.Group();
-
-        // Plane
-        const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
-        const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
-        const plane = new THREE.Mesh(planeGeo, planeMat);
-        plane.rotation.x = -Math.PI / 2;
-        plane.position.y = -0.01;
-        blockGroup.add(plane);
-
-        // Labels (per block)
-        const labels = [];
-
-        // Column numbers (every other for simplicity, or full if you want)
-        for (let i = 0; i < block.columns; i += 2) {
-          const num = 9 + i * 2; // adjust if needed
-          if (num > 39) break;
-          const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5 });
-          const mesh = new THREE.Mesh(textGeo, textMat);
-          const cellCenterX = - (block.columns * cellWidth / 2) + (i + 0.5) * cellWidth;
-          mesh.position.set(cellCenterX, 0.2, - (block.rows * cellDepth / 2) - 18);
-          mesh.rotation.x = -Math.PI / 2;
-          blockGroup.add(mesh);
-          labels.push(mesh);
-        }
-
-        // Row letters
-        'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
-          const textGeo = new TextGeometry(letter, { font, size: 8, depth: 0.6 });
-          const mesh = new THREE.Mesh(textGeo, textMat);
-          const cellCenterZ = - (block.rows * cellDepth / 2) + (idx + 0.5) * cellDepth;
-          mesh.position.set(- (block.columns * cellWidth / 2) - 30, 0.2, cellCenterZ);
-          mesh.rotation.x = -Math.PI / 2;
-          blockGroup.add(mesh);
-          labels.push(mesh);
-        });
-
-        // Block name
-        const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
-        const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-        title.position.set(0, 30, - (block.rows * cellDepth / 2) - 60);
-        title.rotation.x = -Math.PI / 2;
-        blockGroup.add(title);
-        labels.push(title);
-
-        // Position & rotate
-        blockGroup.position.set(block.x * cellWidth, 0, block.z || 0);
-        blockGroup.rotation.y = block.rotation * Math.PI / 180;
-
-        scene.add(blockGroup);
-        block3DObjects[block.id] = { plane, labels };
-      });
-    });
-  }
-
-  // Initial 3D update
-  update3DFrom2D();
 
   // ─── Add New Block ─────────────────────────────────────────────
   document.getElementById('add-block-button').addEventListener('click', () => {
@@ -470,5 +405,5 @@
   }
   animate();
 </script>
-  </body>
+</body>
 </html>
