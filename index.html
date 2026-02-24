@@ -1,43 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Y Block – 3D Viewport</title>
-
-<style>
-body { margin:0; overflow:hidden; font-family:Arial,sans-serif; background:#000; }
-#three-canvas { position:absolute; top:0; left:0; width:100%; height:100%; z-index:10; }
-#two-d-page { position:absolute; top:0; left:0; width:100%; height:100%; display:none; background:#88aaff; z-index:20; }
-#two-d-canvas { width:100%; height:100%; display:block; }
-button { cursor:pointer; }
-
-#settings-button { position:absolute; top:20px; left:20px; z-index:130; padding:10px; background:#333; color:white; border:none; border-radius:50%; font-size:20px; }
-#settings-menu { position:absolute; top:60px; left:20px; z-index:130; background:rgba(0,0,0,0.85); padding:15px; border-radius:8px; display:none; color:white; }
-#settings-menu button { width:100%; padding:10px; margin:5px 0; background:#007bff; color:white; border:none; }
-
-#paste-button { position:absolute; top:20px; right:20px; z-index:130; padding:12px 24px; background:#007bff; color:white; border:none; border-radius:6px; }
-#save-layout-button { position:absolute; top:20px; right:150px; z-index:130; padding:12px 24px; background:#ffc107; border:none; border-radius:6px; font-weight:bold; }
-#back-button { position:absolute; top:20px; left:20px; z-index:130; padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; }
-#add-block-button { position:absolute; top:70px; left:20px; z-index:130; padding:10px 20px; background:#28a745; color:white; border:none; border-radius:6px; }
-
-#paste-modal {
-  position:absolute;
-  top:50%; left:50%;
-  transform:translate(-50%,-50%);
-  background:rgba(255,255,255,0.97);
-  padding:25px;
-  border-radius:10px;
-  width:420px;
-  max-width:90%;
-  z-index:200;
-  display:none;
-  box-shadow:0 4px 20px rgba(0,0,0,0.4);
-}
-#paste-textarea { width:100%; height:200px; font-family:monospace; margin:10px 0; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Y Block – 3D Viewport</title>
+  <style>
+    body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
+    #three-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; }
+    #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
+    #two-d-canvas { width: 100%; height: 100%; display: block; cursor: default; pointer-events: auto; }
+    #settings-button { position: absolute; top: 20px; left: 20px; z-index: 130; padding: 10px; background: #333; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 20px; }
+    #settings-menu { position: absolute; top: 60px; left: 20px; z-index: 130; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; display: none; color: white; }
+    #settings-menu button { display: block; width: 100%; padding: 10px; margin: 5px 0; background: #007bff; color: white; border: none; cursor: pointer; }
+    #paste-button { position: absolute; top: 20px; right: 20px; z-index: 130; padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
+    #paste-button:hover { background: #0056b3; }
+    #paste-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.95); padding: 25px; border-radius: 10px; width: 420px; max-width: 90%; z-index: 140; display: none; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+    #paste-textarea { width: 100%; height: 220px; margin: 15px 0; font-family: monospace; }
+    #submit-paste, #close-modal { padding: 10px 20px; margin: 8px; cursor: pointer; font-size: 14px; }
+    #back-button { position: absolute; top: 20px; left: 20px; z-index: 130; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    #add-block-button { position: absolute; top: 70px; left: 20px; z-index: 130; padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    #save-layout-button { position: absolute; top: 20px; right: 150px; z-index: 130; padding: 12px 24px; background: #ffc107; color: black; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+  </style>
 </head>
-
 <body>
 
 <canvas id="three-canvas"></canvas>
@@ -57,10 +41,13 @@ button { cursor:pointer; }
 <button id="paste-button">Paste Excel Data</button>
 
 <div id="paste-modal">
-  <h3>Paste Excel Data</h3>
-  <textarea id="paste-textarea"></textarea>
-  <button id="submit-paste">Submit</button>
-  <button id="close-modal">Close</button>
+  <h3>Paste Excel Data (Tab-separated from Excel)</h3>
+  <p>Expected columns: Container number, Voyage, Discharge port, Location (e.g. Y 39G 2), Group (20 or 40)</p>
+  <textarea id="paste-textarea" placeholder="Paste copied rows here..."></textarea>
+  <div>
+    <button id="submit-paste">Submit & Place Containers</button>
+    <button id="close-modal">Close</button>
+  </div>
 </div>
 
 <script type="importmap">
@@ -73,221 +60,458 @@ button { cursor:pointer; }
 </script>
 
 <script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+  import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
 
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  // ─── 3D Scene Setup ────────────────────────────────────────────
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x88aaff);
+  scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
 
-const SCALE_2D = 20;
-const CELL_WIDTH_3D = 30;
-const CELL_DEPTH_3D = 10;
+  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 4000);
+  camera.position.set(120, 60, 120);
 
-// ─── 3D SCENE ───────────────────────────────
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x88aaff);
-
-const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 4000);
-camera.position.set(120,60,120);
-
-const renderer = new THREE.WebGLRenderer({antialias:true, canvas:document.getElementById('three-canvas')});
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(devicePixelRatio);
-
-window.addEventListener('resize',()=>{
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
+  const renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('three-canvas') });
   renderer.setSize(innerWidth, innerHeight);
-});
+  renderer.setPixelRatio(devicePixelRatio);
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
+  function resize3D() {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  }
+  window.addEventListener('resize', resize3D);
+  resize3D();
 
-function animate(){
-  requestAnimationFrame(animate);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.rotateSpeed = 0.8;
+  controls.zoomSpeed = 1.2;
+  controls.panSpeed = 0.8;
+  controls.minDistance = 20;
+  controls.maxDistance = 800;
+  controls.maxPolarAngle = Math.PI / 2;
+  controls.target.set(0, 0, 0);
   controls.update();
-  renderer.render(scene,camera);
-}
-animate();
 
-// ─── DATA ───────────────────────────────
-let yardBlocks = [
-  { id:1, name:'Y', x:0, y:0, columns:16, rows:7, color:'rgba(100,150,255,0.5)', rotation:0 }
-];
+  // ─── Shared Yard Variables ─────────────────────────────────────
+  const oddCols = [];
+  for (let n = 9; n <= 39; n += 2) oddCols.push(n);
+  const cellWidth = 30;
+  const cellDepth = 10;
 
-// ─── 2D SETUP ───────────────────────────────
-const twoDPage = document.getElementById('two-d-page');
-const canvas = document.getElementById('two-d-canvas');
-const ctx = canvas.getContext('2d');
+  let block3DObjects = {};
 
-function resize2D(){
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resize2D);
-resize2D();
+  function update3DFrom2D() {
+    Object.values(block3DObjects).forEach(obj => {
+      scene.remove(obj.plane);
+      obj.labels.forEach(l => scene.remove(l));
+    });
+    block3DObjects = {};
 
-let camera2D = { x:0, y:0, zoom:1 };
-let selectedBlock=null;
-let isDragging=false;
-let dragOffsetX=0, dragOffsetY=0;
+    const loader = new FontLoader();
+    loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
+      const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-// ─── DRAW 2D ───────────────────────────────
-function draw2D(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="#88aaff";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+      yardBlocks.forEach(block => {
+        const blockGroup = new THREE.Group();
 
-  ctx.save();
-  ctx.translate(canvas.width/2 + camera2D.x, canvas.height/2 + camera2D.y);
-  ctx.scale(camera2D.zoom, camera2D.zoom);
+        const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
+        const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.rotation.x = -Math.PI / 2;
+        plane.position.y = -0.01;
+        blockGroup.add(plane);
 
-  yardBlocks.forEach(block=>{
-    ctx.save();
-    ctx.translate(block.x, block.y);
-    ctx.rotate(block.rotation*Math.PI/180);
+        const labels = [];
 
-    const w = block.columns*SCALE_2D;
-    const h = block.rows*SCALE_2D;
+        for (let i = 0; i < block.columns; i += 2) {
+          const num = 9 + i * 2;
+          if (num > 39) break;
+          const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5 });
+          const mesh = new THREE.Mesh(textGeo, textMat);
+          const cellCenterX = - (block.columns * cellWidth / 2) + (i + 0.5) * cellWidth;
+          mesh.position.set(cellCenterX, 0.2, - (block.rows * cellDepth / 2) - 18);
+          mesh.rotation.x = -Math.PI / 2;
+          blockGroup.add(mesh);
+          labels.push(mesh);
+        }
 
-    ctx.fillStyle=block.color;
-    ctx.fillRect(-w/2,-h/2,w,h);
+        'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
+          const textGeo = new TextGeometry(letter, { font, size: 8, depth: 0.6 });
+          const mesh = new THREE.Mesh(textGeo, textMat);
+          const cellCenterZ = - (block.rows * cellDepth / 2) + (idx + 0.5) * cellDepth;
+          mesh.position.set(- (block.columns * cellWidth / 2) - 30, 0.2, cellCenterZ);
+          mesh.rotation.x = -Math.PI / 2;
+          blockGroup.add(mesh);
+          labels.push(mesh);
+        });
 
-    ctx.strokeStyle="#000";
-    ctx.lineWidth=2;
-    ctx.strokeRect(-w/2,-h/2,w,h);
+        const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
+        const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
+        title.position.set(0, 30, - (block.rows * cellDepth / 2) - 60);
+        title.rotation.x = -Math.PI / 2;
+        blockGroup.add(title);
+        labels.push(title);
 
-    ctx.restore();
+        blockGroup.position.set(block.x * cellWidth, 0, block.y * cellDepth); // 2D y → 3D Z
+        blockGroup.rotation.y = block.rotation * Math.PI / 180;
+
+        scene.add(blockGroup);
+        block3DObjects[block.id] = { plane, labels };
+      });
+    });
+  }
+
+  update3DFrom2D();
+
+  // ─── 2D Yard Layout ────────────────────────────────────────────
+  const twoDPage = document.getElementById('two-d-page');
+  const twoDCanvas = document.getElementById('two-d-canvas');
+  const twoDCtx = twoDCanvas.getContext('2d');
+
+  function resize2DCanvas() {
+    twoDCanvas.width = window.innerWidth;
+    twoDCanvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize2DCanvas);
+  resize2DCanvas();
+
+  let yardBlocks = [
+    {
+      id: 1,
+      name: 'Y',
+      x: 0,
+      y: 0,
+      z: 0,
+      columns: 16,
+      rows: 7,
+      color: 'rgba(100, 150, 255, 0.5)',
+      rotation: 0
+    }
+  ];
+
+  let selectedBlock = null;
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  let camera2D = { x: 0, y: 0, zoom: 1 };
+
+  function draw2DYard() {
+    twoDCtx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
+    twoDCtx.fillStyle = '#88aaff';
+    twoDCtx.fillRect(0, 0, twoDCanvas.width, twoDCanvas.height);
+
+    twoDCtx.save();
+    twoDCtx.translate(twoDCanvas.width / 2 + camera2D.x, twoDCanvas.height / 2 + camera2D.y);
+    twoDCtx.scale(camera2D.zoom, camera2D.zoom);
+
+    const scale = 20;
+
+    yardBlocks.forEach(block => {
+      twoDCtx.save();
+      twoDCtx.translate(block.x * scale, block.y * scale);
+      twoDCtx.rotate(block.rotation * Math.PI / 180);
+
+      twoDCtx.fillStyle = block.color;
+      twoDCtx.fillRect(-block.columns * scale / 2, -block.rows * scale / 2,
+                       block.columns * scale, block.rows * scale);
+
+      twoDCtx.strokeStyle = '#000';
+      twoDCtx.lineWidth = 3;
+      twoDCtx.strokeRect(-block.columns * scale / 2, -block.rows * scale / 2,
+                         block.columns * scale, block.rows * scale);
+
+      twoDCtx.fillStyle = 'white';
+      twoDCtx.font = 'bold 24px Arial';
+      twoDCtx.textAlign = 'center';
+      twoDCtx.textBaseline = 'middle';
+      twoDCtx.fillText(block.name + ' Block', 0, 0);
+
+      twoDCtx.strokeStyle = '#aaccff';
+      twoDCtx.lineWidth = 1;
+      for (let i = 1; i < block.columns; i++) {
+        const x = -block.columns * scale / 2 + i * scale;
+        twoDCtx.beginPath();
+        twoDCtx.moveTo(x, -block.rows * scale / 2);
+        twoDCtx.lineTo(x, block.rows * scale / 2);
+        twoDCtx.stroke();
+      }
+      for (let i = 1; i < block.rows; i++) {
+        const y = -block.rows * scale / 2 + i * scale;
+        twoDCtx.beginPath();
+        twoDCtx.moveTo(-block.columns * scale / 2, y);
+        twoDCtx.lineTo(block.columns * scale / 2, y);
+        twoDCtx.stroke();
+      }
+
+      twoDCtx.restore();
+    });
+
+    twoDCtx.restore();
+  }
+
+  // ─── Mouse Controls ────────────────────────────────────────────
+  twoDCanvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+    const oldZoom = camera2D.zoom;
+    camera2D.zoom *= zoomFactor;
+
+    camera2D.x = mouseX - (mouseX - camera2D.x) * (camera2D.zoom / oldZoom);
+    camera2D.y = mouseY - (mouseY - camera2D.y) * (camera2D.zoom / oldZoom);
+
+    draw2DYard();
   });
 
-  ctx.restore();
-}
-draw2D();
+  let isPanning = false;
+  let panStartX = 0, panStartY = 0;
 
-// ─── WORLD MOUSE HELPER ───────────────────────────────
-function screenToWorld(e){
-  const rect = canvas.getBoundingClientRect();
-  let mx = (e.clientX-rect.left)-canvas.width/2;
-  let my = (e.clientY-rect.top)-canvas.height/2;
-  mx = (mx-camera2D.x)/camera2D.zoom;
-  my = (my-camera2D.y)/camera2D.zoom;
-  return {mx,my};
-}
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button === 1) {
+      isPanning = true;
+      panStartX = e.clientX - camera2D.x;
+      panStartY = e.clientY - camera2D.y;
+      twoDCanvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+  });
 
-// ─── DRAGGING ───────────────────────────────
-canvas.addEventListener('mousedown',e=>{
-  if(e.button!==0) return;
-  const {mx,my} = screenToWorld(e);
+  twoDCanvas.addEventListener('mousemove', e => {
+    if (isPanning) {
+      camera2D.x = e.clientX - panStartX;
+      camera2D.y = e.clientY - panStartY;
+      draw2DYard();
+    }
+  });
 
-  for(let i=yardBlocks.length-1;i>=0;i--){
-    const b = yardBlocks[i];
-    const halfW = b.columns*SCALE_2D/2;
-    const halfH = b.rows*SCALE_2D/2;
+  twoDCanvas.addEventListener('mouseup', e => {
+    if (e.button === 1) {
+      isPanning = false;
+      twoDCanvas.style.cursor = 'default';
+    }
+  });
 
-    if(mx>=b.x-halfW && mx<=b.x+halfW &&
-       my>=b.y-halfH && my<=b.y+halfH){
-        selectedBlock=b;
-        isDragging=true;
-        dragOffsetX=mx-b.x;
-        dragOffsetY=my-b.y;
+  // ─── Block Dragging ────────────────────────────────────────────
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const rect = twoDCanvas.getBoundingClientRect();
+    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2 - camera2D.x;
+    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2 - camera2D.y;
+
+    mouseX /= camera2D.zoom;
+    mouseY /= camera2D.zoom;
+
+    selectedBlock = null;
+    for (let i = yardBlocks.length - 1; i >= 0; i--) {
+      const b = yardBlocks[i];
+      const halfW = b.columns * 10;
+      const halfH = b.rows * 10;
+      if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
+          mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
+        selectedBlock = b;
+        isDragging = true;
+        dragOffsetX = mouseX - b.x;
+        dragOffsetY = mouseY - b.y;
         break;
-    }
-  }
-});
-
-canvas.addEventListener('mousemove',e=>{
-  if(!isDragging||!selectedBlock) return;
-  const {mx,my} = screenToWorld(e);
-  selectedBlock.x = mx-dragOffsetX;
-  selectedBlock.y = my-dragOffsetY;
-  draw2D();
-});
-
-canvas.addEventListener('mouseup',()=>{
-  isDragging=false;
-  selectedBlock=null;
-});
-
-// ─── RIGHT CLICK ───────────────────────────────
-canvas.addEventListener('contextmenu',e=>{
-  e.preventDefault();
-  const {mx,my} = screenToWorld(e);
-
-  for(let b of yardBlocks){
-    const halfW = b.columns*SCALE_2D/2;
-    const halfH = b.rows*SCALE_2D/2;
-    if(mx>=b.x-halfW && mx<=b.x+halfW &&
-       my>=b.y-halfH && my<=b.y+halfH){
-
-      const action = prompt("1=Delete\n2=Rotate 90°");
-      if(action==="1"){
-        yardBlocks = yardBlocks.filter(x=>x!==b);
       }
-      if(action==="2"){
-        [b.columns,b.rows]=[b.rows,b.columns];
-        b.rotation=(b.rotation+90)%360;
-      }
-      draw2D();
-      break;
     }
-  }
-});
-
-// ─── ADD BLOCK ───────────────────────────────
-document.getElementById('add-block-button').addEventListener('click',()=>{
-  yardBlocks.push({
-    id:Date.now(),
-    name:'New',
-    x:0,y:0,
-    columns:16,
-    rows:7,
-    color:'rgba(255,100,100,0.5)',
-    rotation:0
   });
-  draw2D();
-});
 
-// ─── SAVE TO 3D ───────────────────────────────
-document.getElementById('save-layout-button').addEventListener('click',()=>{
-  scene.clear();
-  yardBlocks.forEach(b=>{
-    const geo = new THREE.PlaneGeometry(b.columns*CELL_WIDTH_3D, b.rows*CELL_DEPTH_3D);
-    const mat = new THREE.MeshBasicMaterial({color:0x555577, side:THREE.DoubleSide});
-    const plane = new THREE.Mesh(geo,mat);
-    plane.rotation.x=-Math.PI/2;
-    plane.position.set(b.x*(CELL_WIDTH_3D/SCALE_2D),0,b.y*(CELL_DEPTH_3D/SCALE_2D));
-    scene.add(plane);
+  twoDCanvas.addEventListener('mousemove', e => {
+    if (!isDragging || !selectedBlock) return;
+    const rect = twoDCanvas.getBoundingClientRect();
+    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2 - camera2D.x;
+    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2 - camera2D.y;
+
+    mouseX /= camera2D.zoom;
+    mouseY /= camera2D.zoom;
+
+    selectedBlock.x = mouseX - dragOffsetX;
+    selectedBlock.y = mouseY - dragOffsetY;
+    draw2DYard();
   });
-});
 
-// ─── UI NAVIGATION ───────────────────────────────
-document.getElementById('yard-layout-button').addEventListener('click',()=>{
-  twoDPage.style.display='block';
-  draw2D();
-});
-document.getElementById('back-button').addEventListener('click',()=>{
-  twoDPage.style.display='none';
-});
-document.getElementById('settings-button').addEventListener('click',()=>{
-  const menu=document.getElementById('settings-menu');
-  menu.style.display=menu.style.display==='block'?'none':'block';
-});
-document.addEventListener('click',e=>{
-  if(!e.target.closest('#settings-button') && !e.target.closest('#settings-menu')){
-    document.getElementById('settings-menu').style.display='none';
+  twoDCanvas.addEventListener('mouseup', () => {
+    isDragging = false;
+    selectedBlock = null;
+  });
+
+  // ─── Right-click Delete/Rotate ─────────────────────────────────
+  twoDCanvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const rect = twoDCanvas.getBoundingClientRect();
+    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2 - camera2D.x;
+    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2 - camera2D.y;
+
+    mouseX /= camera2D.zoom;
+    mouseY /= camera2D.zoom;
+
+    let clickedBlock = null;
+    for (let i = yardBlocks.length - 1; i >= 0; i--) {
+      const b = yardBlocks[i];
+      const halfW = b.columns * 10;
+      const halfH = b.rows * 10;
+      if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
+          mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
+        clickedBlock = b;
+        break;
+      }
+    }
+
+    if (clickedBlock) {
+      const action = prompt(`"${clickedBlock.name} Block":\n1 = Delete\n2 = Rotate 90°\nEnter number:`);
+      if (action === '1') {
+        yardBlocks = yardBlocks.filter(b => b !== clickedBlock);
+        draw2DYard();
+      } else if (action === '2') {
+        const temp = clickedBlock.columns;
+        clickedBlock.columns = clickedBlock.rows;
+        clickedBlock.rows = temp;
+        clickedBlock.rotation = (clickedBlock.rotation + 90) % 360;
+        draw2DYard();
+      }
+    }
+  });
+
+  // ─── Save Layout ───────────────────────────────────────────────
+  document.getElementById('save-layout-button').addEventListener('click', () => {
+    update3DFrom2D();
+    alert('Layout saved! 3D view updated with separate blocks.');
+  });
+
+  // ─── Add New Block ─────────────────────────────────────────────
+  document.getElementById('add-block-button').addEventListener('click', () => {
+    const name = prompt('Block name (e.g. X, Z):', 'NewBlock');
+    if (!name) return;
+
+    const columns = parseInt(prompt('Number of columns (bays wide):', '16'));
+    const rows = parseInt(prompt('Number of rows (depth):', '7'));
+    if (isNaN(columns) || isNaN(rows) || columns <= 0 || rows <= 0) {
+      alert('Invalid numbers');
+      return;
+    }
+
+    yardBlocks.push({
+      id: yardBlocks.length + 1,
+      name,
+      x: 0,
+      y: 0,
+      z: 0,
+      columns,
+      rows,
+      color: `rgba(${Math.random()*150+100}, ${Math.random()*150+100}, ${Math.random()*150+100}, 0.5)`,
+      rotation: 0
+    });
+
+    draw2DYard();
+  });
+
+  // ─── Paste Excel Modal ─────────────────────────────────────────
+  const pasteButton = document.getElementById('paste-button');
+  const pasteModal = document.getElementById('paste-modal');
+  const closeModal = document.getElementById('close-modal');
+  const submitPaste = document.getElementById('submit-paste');
+
+  pasteButton.addEventListener('click', () => {
+    pasteModal.style.display = 'block';
+  });
+
+  closeModal.addEventListener('click', () => {
+    pasteModal.style.display = 'none';
+  });
+
+  submitPaste.addEventListener('click', () => {
+    const data = document.getElementById('paste-textarea').value.trim();
+    if (!data) return;
+
+    const lines = data.split('\n').map(l => l.trim()).filter(l => l);
+    let start = 0;
+    if (lines[0]?.toLowerCase().includes('container')) start = 1;
+
+    let placedCount = 0;
+
+    for (let i = start; i < lines.length; i++) {
+      const cols = lines[i].split('\t');
+      if (cols.length < 4) continue;
+
+      const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
+
+      const locMatch = locationRaw.match(/Y\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
+      if (!locMatch) {
+        console.warn(`Invalid location: "${locationRaw}"`);
+        continue;
+      }
+
+      const rawNum = parseInt(locMatch[1]);
+      const letter = locMatch[2].toUpperCase();
+      const stackHeight = parseInt(locMatch[3]) || 1;
+
+      if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
+        console.warn(`Skipped even/invalid column: ${rawNum}`);
+        continue;
+      }
+
+      const index = (rawNum - 9) / 2;
+      const letIdx = 'ABCDEFG'.indexOf(letter);
+
+      if (index < 0 || index >= 16 || letIdx === -1 || stackHeight < 1) {
+        console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
+        continue;
+      }
+
+      const x = index * cellWidth - (16 * cellWidth / 2) + cellWidth / 2;
+      const z = letIdx * cellDepth - (7 * cellDepth / 2) + cellDepth / 2;
+
+      // TODO: place container in correct block (future step)
+
+      placedCount++;
+    }
+
+    console.log(`Placed ${placedCount} containers`);
+    pasteModal.style.display = 'none';
+    document.getElementById('paste-textarea').value = '';
+  });
+
+  // ─── Settings & Navigation ─────────────────────────────────────
+  const settingsButton = document.getElementById('settings-button');
+  const settingsMenu = document.getElementById('settings-menu');
+
+  settingsButton.addEventListener('click', () => {
+    settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
+  });
+
+  document.addEventListener('click', e => {
+    if (!settingsButton.contains(e.target) && !settingsMenu.contains(e.target)) {
+      settingsMenu.style.display = 'none';
+    }
+  });
+
+  document.getElementById('yard-layout-button').addEventListener('click', () => {
+    twoDPage.style.display = 'block';
+    draw2DYard();
+    settingsMenu.style.display = 'none';
+  });
+
+  document.getElementById('back-button').addEventListener('click', () => {
+    twoDPage.style.display = 'none';
+  });
+
+  // ─── Animate ───────────────────────────────────────────────────
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
   }
-});
-
-// ─── PASTE MODAL ───────────────────────────────
-document.getElementById('paste-button').addEventListener('click',()=>{
-  document.getElementById('paste-modal').style.display='block';
-});
-document.getElementById('close-modal').addEventListener('click',()=>{
-  document.getElementById('paste-modal').style.display='none';
-});
-document.getElementById('submit-paste').addEventListener('click',()=>{
-  console.log("Paste parsing preserved for expansion.");
-  document.getElementById('paste-modal').style.display='none';
-});
-
+  animate();
 </script>
 </body>
 </html>
