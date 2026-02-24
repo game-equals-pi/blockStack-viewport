@@ -43,14 +43,14 @@
       border-radius: 6px; cursor: pointer;
     }
     #add-block-button {
-      position: absolute; top: 20px; left: 150px; z-index: 130;
+      position: absolute; top: 70px; left: 20px; z-index: 130;
       padding: 10px 20px; background: #28a745; color: white; border: none;
       border-radius: 6px; cursor: pointer;
     }
     #save-layout-button {
-      position: absolute; top: 20px; right: 20px; z-index: 130;
-      padding: 10px 20px; background: #ffc107; color: black; border: none;
-      border-radius: 6px; cursor: pointer;
+      position: absolute; top: 20px; right: 150px; z-index: 130;
+      padding: 12px 24px; background: #ffc107; color: black; border: none;
+      border-radius: 6px; cursor: pointer; font-weight: bold;
     }
   </style>
 </head>
@@ -62,7 +62,7 @@
   <canvas id="two-d-canvas"></canvas>
   <button id="back-button">Back to 3D</button>
   <button id="add-block-button">Add New Block</button>
-  <button id="save-layout-button">Save Layout</button>
+  <button id="save-layout-button">Save Layout to 3D</button>
 </div>
 
 <button id="settings-button">⚙</button>
@@ -308,11 +308,12 @@
   let panStartX = 0, panStartY = 0;
 
   twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button === 1) { // middle mouse for pan
+    if (e.button === 1) {
       isPanning = true;
       panStartX = e.clientX - camera2D.x;
       panStartY = e.clientY - camera2D.y;
       twoDCanvas.style.cursor = 'grabbing';
+      e.preventDefault();
     }
   });
 
@@ -331,28 +332,28 @@
     }
   });
 
-  // ─── Block Interaction ─────────────────────────────────────────
+  // ─── Block Dragging ────────────────────────────────────────────
   twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return; // left click only for drag
+    if (e.button !== 0) return;
     const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    const scale = 20;
+    // Adjust for current camera pan & zoom
+    mouseX = mouseX / camera2D.zoom;
+    mouseY = mouseY / camera2D.zoom;
 
     selectedBlock = null;
     for (let i = yardBlocks.length - 1; i >= 0; i--) {
       const b = yardBlocks[i];
-      const left = b.x * scale - (b.columns * scale / 2);
-      const right = b.x * scale + (b.columns * scale / 2);
-      const top = b.y * scale - (b.rows * scale / 2);
-      const bottom = b.y * scale + (b.rows * scale / 2);
-
-      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+      const halfW = b.columns * 20 / 2;
+      const halfH = b.rows * 20 / 2;
+      if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
+          mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
         selectedBlock = b;
         isDragging = true;
-        dragOffsetX = mouseX - b.x * scale;
-        dragOffsetY = mouseY - b.y * scale;
+        dragOffsetX = mouseX - b.x;
+        dragOffsetY = mouseY - b.y;
         break;
       }
     }
@@ -361,13 +362,14 @@
   twoDCanvas.addEventListener('mousemove', e => {
     if (!isDragging || !selectedBlock) return;
     const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    const scale = 20;
+    mouseX = mouseX / camera2D.zoom;
+    mouseY = mouseY / camera2D.zoom;
 
-    selectedBlock.x = (mouseX - dragOffsetX) / scale;
-    selectedBlock.y = (mouseY - dragOffsetY) / scale;
+    selectedBlock.x = mouseX - dragOffsetX;
+    selectedBlock.y = mouseY - dragOffsetY;
     draw2DYard();
   });
 
@@ -376,34 +378,34 @@
     selectedBlock = null;
   });
 
-  // Right-click
+  // ─── Right-click Delete/Rotate ─────────────────────────────────
   twoDCanvas.addEventListener('contextmenu', e => {
     e.preventDefault();
     const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
+    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-    const scale = 20;
+    mouseX = mouseX / camera2D.zoom;
+    mouseY = mouseY / camera2D.zoom;
 
     let clickedBlock = null;
     for (let i = yardBlocks.length - 1; i >= 0; i--) {
       const b = yardBlocks[i];
-      const left = b.x * scale - (b.columns * scale / 2);
-      const right = b.x * scale + (b.columns * scale / 2);
-      const top = b.y * scale - (b.rows * scale / 2);
-      const bottom = b.y * scale + (b.rows * scale / 2);
-
-      if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+      const halfW = b.columns * 20 / 2;
+      const halfH = b.rows * 20 / 2;
+      if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
+          mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
         clickedBlock = b;
         break;
       }
     }
 
     if (clickedBlock) {
-      if (confirm(`Delete "${clickedBlock.name} Block"?`)) {
+      const action = prompt(`"${clickedBlock.name} Block":\n1 = Delete\n2 = Rotate 90°\nEnter number (or cancel):`);
+      if (action === '1') {
         yardBlocks = yardBlocks.filter(b => b !== clickedBlock);
         draw2DYard();
-      } else if (confirm(`Rotate "${clickedBlock.name} Block" 90°?`)) {
+      } else if (action === '2') {
         const temp = clickedBlock.columns;
         clickedBlock.columns = clickedBlock.rows;
         clickedBlock.rows = temp;
@@ -416,7 +418,7 @@
   // ─── Save Layout ───────────────────────────────────────────────
   document.getElementById('save-layout-button').addEventListener('click', () => {
     update3DFrom2D();
-    alert('Layout saved! 3D view now shows separate blocks.');
+    alert('Layout saved! 3D now shows separate blocks with updated positions/rotations.');
   });
 
   // ─── Add New Block ─────────────────────────────────────────────
