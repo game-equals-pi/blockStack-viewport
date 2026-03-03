@@ -97,7 +97,7 @@
   controls.target.set(0, 0, 0);
   controls.update();
 
-  // ─── Shared Yard Variables ─────────────────────────────────────
+  // ─── Yard Variables ────────────────────────────────────────────
   const oddCols = [];
   for (let n = 9; n <= 39; n += 2) oddCols.push(n);
   const cellWidth = 30;
@@ -106,9 +106,9 @@
   let block3DObjects = {};
 
   function update3DFrom2D() {
+    // Remove all old block groups
     Object.values(block3DObjects).forEach(obj => {
-      scene.remove(obj.plane);
-      obj.labels.forEach(l => scene.remove(l));
+      if (obj.group) scene.remove(obj.group);
     });
     block3DObjects = {};
 
@@ -133,8 +133,8 @@
           if (num > 39) break;
           const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5 });
           const mesh = new THREE.Mesh(textGeo, textMat);
-          const cellCenterX = - (block.columns * cellWidth / 2) + (i + 0.5) * cellWidth;
-          mesh.position.set(cellCenterX, 0.2, - (block.rows * cellDepth / 2) - 18);
+          const cellCenterX = -(block.columns * cellWidth / 2) + (i + 0.5) * cellWidth;
+          mesh.position.set(cellCenterX, 0.2, -(block.rows * cellDepth / 2) - 18);
           mesh.rotation.x = -Math.PI / 2;
           blockGroup.add(mesh);
           labels.push(mesh);
@@ -143,8 +143,8 @@
         'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
           const textGeo = new TextGeometry(letter, { font, size: 8, depth: 0.6 });
           const mesh = new THREE.Mesh(textGeo, textMat);
-          const cellCenterZ = - (block.rows * cellDepth / 2) + (idx + 0.5) * cellDepth;
-          mesh.position.set(- (block.columns * cellWidth / 2) - 30, 0.2, cellCenterZ);
+          const cellCenterZ = -(block.rows * cellDepth / 2) + (idx + 0.5) * cellDepth;
+          mesh.position.set(-(block.columns * cellWidth / 2) - 30, 0.2, cellCenterZ);
           mesh.rotation.x = -Math.PI / 2;
           blockGroup.add(mesh);
           labels.push(mesh);
@@ -152,16 +152,16 @@
 
         const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
         const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-        title.position.set(0, 30, - (block.rows * cellDepth / 2) - 60);
+        title.position.set(0, 30, -(block.rows * cellDepth / 2) - 60);
         title.rotation.x = -Math.PI / 2;
         blockGroup.add(title);
         labels.push(title);
 
-        blockGroup.position.set(block.x * cellWidth, 0, block.y * cellDepth); // 2D y → 3D Z
+        blockGroup.position.set(block.x * cellWidth, 0, block.y * cellDepth);
         blockGroup.rotation.y = block.rotation * Math.PI / 180;
 
         scene.add(blockGroup);
-        block3DObjects[block.id] = { plane, labels };
+        block3DObjects[block.id] = { group: blockGroup, plane, labels };
       });
     });
   }
@@ -201,6 +201,8 @@
 
   let camera2D = { x: 0, y: 0, zoom: 1 };
 
+  const WORLD_SCALE = 20;
+
   function draw2DYard() {
     twoDCtx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
     twoDCtx.fillStyle = '#88aaff';
@@ -210,21 +212,19 @@
     twoDCtx.translate(twoDCanvas.width / 2 + camera2D.x, twoDCanvas.height / 2 + camera2D.y);
     twoDCtx.scale(camera2D.zoom, camera2D.zoom);
 
-    const scale = 20;
-
     yardBlocks.forEach(block => {
       twoDCtx.save();
-      twoDCtx.translate(block.x * scale, block.y * scale);
+      twoDCtx.translate(block.x * WORLD_SCALE, block.y * WORLD_SCALE);
       twoDCtx.rotate(block.rotation * Math.PI / 180);
 
       twoDCtx.fillStyle = block.color;
-      twoDCtx.fillRect(-block.columns * scale / 2, -block.rows * scale / 2,
-                       block.columns * scale, block.rows * scale);
+      twoDCtx.fillRect(-block.columns * WORLD_SCALE / 2, -block.rows * WORLD_SCALE / 2,
+                       block.columns * WORLD_SCALE, block.rows * WORLD_SCALE);
 
       twoDCtx.strokeStyle = '#000';
       twoDCtx.lineWidth = 3;
-      twoDCtx.strokeRect(-block.columns * scale / 2, -block.rows * scale / 2,
-                         block.columns * scale, block.rows * scale);
+      twoDCtx.strokeRect(-block.columns * WORLD_SCALE / 2, -block.rows * WORLD_SCALE / 2,
+                         block.columns * WORLD_SCALE, block.rows * WORLD_SCALE);
 
       twoDCtx.fillStyle = 'white';
       twoDCtx.font = 'bold 24px Arial';
@@ -235,17 +235,17 @@
       twoDCtx.strokeStyle = '#aaccff';
       twoDCtx.lineWidth = 1;
       for (let i = 1; i < block.columns; i++) {
-        const x = -block.columns * scale / 2 + i * scale;
+        const x = -block.columns * WORLD_SCALE / 2 + i * WORLD_SCALE;
         twoDCtx.beginPath();
-        twoDCtx.moveTo(x, -block.rows * scale / 2);
-        twoDCtx.lineTo(x, block.rows * scale / 2);
+        twoDCtx.moveTo(x, -block.rows * WORLD_SCALE / 2);
+        twoDCtx.lineTo(x, block.rows * WORLD_SCALE / 2);
         twoDCtx.stroke();
       }
       for (let i = 1; i < block.rows; i++) {
-        const y = -block.rows * scale / 2 + i * scale;
+        const y = -block.rows * WORLD_SCALE / 2 + i * WORLD_SCALE;
         twoDCtx.beginPath();
-        twoDCtx.moveTo(-block.columns * scale / 2, y);
-        twoDCtx.lineTo(block.columns * scale / 2, y);
+        twoDCtx.moveTo(-block.columns * WORLD_SCALE / 2, y);
+        twoDCtx.lineTo(block.columns * WORLD_SCALE / 2, y);
         twoDCtx.stroke();
       }
 
@@ -256,131 +256,128 @@
   }
 
   // ─── Mouse Controls ────────────────────────────────────────────
-// Global scale constant (used for block drawing & hit detection)
-const WORLD_SCALE = 20;  // pixels per world unit
-
-// ─── Wheel Zoom ────────────────────────────────────────────────
-twoDCanvas.addEventListener('wheel', e => {
-  e.preventDefault();
-
-  const rect = twoDCanvas.getBoundingClientRect();
-  const mouseScreenX = e.clientX - rect.left;
-  const mouseScreenY = e.clientY - rect.top;
-
-  // Center-relative mouse before zoom
-  const preZoomX = mouseScreenX - twoDCanvas.width / 2 - camera2D.x;
-  const preZoomY = mouseScreenY - twoDCanvas.height / 2 - camera2D.y;
-
-  const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-  const oldZoom = camera2D.zoom;
-  camera2D.zoom *= zoomFactor;
-
-  // Keep zoom centered on mouse
-  camera2D.x = mouseScreenX - twoDCanvas.width / 2 - preZoomX * (camera2D.zoom / oldZoom);
-  camera2D.y = mouseScreenY - twoDCanvas.height / 2 - preZoomY * (camera2D.zoom / oldZoom);
-
-  draw2DYard();
-});
-
-// ─── Pan (middle mouse) ────────────────────────────────────────
-let isPanning = false;
-let panStartX = 0, panStartY = 0;
-
-twoDCanvas.addEventListener('mousedown', e => {
-  if (e.button === 1) { // middle mouse
-    isPanning = true;
-    panStartX = e.clientX - camera2D.x;
-    panStartY = e.clientY - camera2D.y;
-    twoDCanvas.style.cursor = 'grabbing';
+  twoDCanvas.addEventListener('wheel', e => {
     e.preventDefault();
-  }
-});
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseScreenX = e.clientX - rect.left;
+    const mouseScreenY = e.clientY - rect.top;
 
-twoDCanvas.addEventListener('mousemove', e => {
-  if (isPanning) {
-    camera2D.x = e.clientX - panStartX;
-    camera2D.y = e.clientY - panStartY;
+    const preZoomX = mouseScreenX - twoDCanvas.width / 2 - camera2D.x;
+    const preZoomY = mouseScreenY - twoDCanvas.height / 2 - camera2D.y;
+
+    const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const oldZoom = camera2D.zoom;
+    camera2D.zoom *= zoomFactor;
+
+    camera2D.x = mouseScreenX - twoDCanvas.width / 2 - preZoomX * (camera2D.zoom / oldZoom);
+    camera2D.y = mouseScreenY - twoDCanvas.height / 2 - preZoomY * (camera2D.zoom / oldZoom);
+
     draw2DYard();
-  }
-});
+  });
 
-twoDCanvas.addEventListener('mouseup', e => {
-  if (e.button === 1) {
-    isPanning = false;
-    twoDCanvas.style.cursor = 'default';
-  }
-});
+  let isPanning = false;
+  let panStartX = 0, panStartY = 0;
 
-// ─── Drag Block (left mouse) ───────────────────────────────────
-twoDCanvas.addEventListener('mousedown', e => {
-  if (e.button !== 0) return;
-
-  const rect = twoDCanvas.getBoundingClientRect();
-  const mouseScreenX = e.clientX - rect.left;
-  const mouseScreenY = e.clientY - rect.top;
-
-  // Convert screen → center-relative → world
-  const centerX = mouseScreenX - twoDCanvas.width / 2;
-  const centerY = mouseScreenY - twoDCanvas.height / 2;
-  const worldX = (centerX - camera2D.x) / camera2D.zoom;
-  const worldY = (centerY - camera2D.y) / camera2D.zoom;
-
-  selectedBlock = null;
-  for (let i = yardBlocks.length - 1; i >= 0; i--) {
-    const b = yardBlocks[i];
-    const halfW = b.columns * (WORLD_SCALE / 2);
-    const halfH = b.rows * (WORLD_SCALE / 2);
-
-    if (worldX >= b.x - halfW && worldX <= b.x + halfW &&
-        worldY >= b.y - halfH && worldY <= b.y + halfH) {
-      selectedBlock = b;
-      isDragging = true;
-      dragOffsetX = worldX - b.x;
-      dragOffsetY = worldY - b.y;
-      break;
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button === 1) {
+      isPanning = true;
+      panStartX = e.clientX - camera2D.x;
+      panStartY = e.clientY - camera2D.y;
+      twoDCanvas.style.cursor = 'grabbing';
+      e.preventDefault();
     }
-  }
-});
+  });
 
-twoDCanvas.addEventListener('mousemove', e => {
-  if (!isDragging || !selectedBlock) return;
+  twoDCanvas.addEventListener('mousemove', e => {
+    if (isPanning) {
+      camera2D.x = e.clientX - panStartX;
+      camera2D.y = e.clientY - panStartY;
+      draw2DYard();
+    }
+  });
 
-  const rect = twoDCanvas.getBoundingClientRect();
-  const mouseScreenX = e.clientX - rect.left;
-  const mouseScreenY = e.clientY - rect.top;
+  twoDCanvas.addEventListener('mouseup', e => {
+    if (e.button === 1) {
+      isPanning = false;
+      twoDCanvas.style.cursor = 'default';
+    }
+  });
 
-  const centerX = mouseScreenX - twoDCanvas.width / 2;
-  const centerY = mouseScreenY - twoDCanvas.height / 2;
-  const worldX = (centerX - camera2D.x) / camera2D.zoom;
-  const worldY = (centerY - camera2D.y) / camera2D.zoom;
+  // ─── Block Dragging ────────────────────────────────────────────
+  twoDCanvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
 
-  selectedBlock.x = worldX - dragOffsetX;
-  selectedBlock.y = worldY - dragOffsetY;
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseScreenX = e.clientX - rect.left;
+    const mouseScreenY = e.clientY - rect.top;
 
-  draw2DYard();
-});
+    const centerX = mouseScreenX - twoDCanvas.width / 2;
+    const centerY = mouseScreenY - twoDCanvas.height / 2;
 
-twoDCanvas.addEventListener('mouseup', () => {
-  isDragging = false;
-  selectedBlock = null;
-});
+    const worldX = (centerX - camera2D.x) / camera2D.zoom;
+    const worldY = (centerY - camera2D.y) / camera2D.zoom;
+
+    selectedBlock = null;
+    for (let i = yardBlocks.length - 1; i >= 0; i--) {
+      const b = yardBlocks[i];
+      const halfW = b.columns * (WORLD_SCALE / 2);
+      const halfH = b.rows * (WORLD_SCALE / 2);
+
+      if (worldX >= b.x - halfW && worldX <= b.x + halfW &&
+          worldY >= b.y - halfH && worldY <= b.y + halfH) {
+        selectedBlock = b;
+        isDragging = true;
+        dragOffsetX = worldX - b.x;
+        dragOffsetY = worldY - b.y;
+        break;
+      }
+    }
+  });
+
+  twoDCanvas.addEventListener('mousemove', e => {
+    if (!isDragging || !selectedBlock) return;
+
+    const rect = twoDCanvas.getBoundingClientRect();
+    const mouseScreenX = e.clientX - rect.left;
+    const mouseScreenY = e.clientY - rect.top;
+
+    const centerX = mouseScreenX - twoDCanvas.width / 2;
+    const centerY = mouseScreenY - twoDCanvas.height / 2;
+
+    const worldX = (centerX - camera2D.x) / camera2D.zoom;
+    const worldY = (centerY - camera2D.y) / camera2D.zoom;
+
+    selectedBlock.x = worldX - dragOffsetX;
+    selectedBlock.y = worldY - dragOffsetY;
+
+    draw2DYard();
+  });
+
+  twoDCanvas.addEventListener('mouseup', () => {
+    isDragging = false;
+    selectedBlock = null;
+  });
+
   // ─── Right-click Delete/Rotate ─────────────────────────────────
   twoDCanvas.addEventListener('contextmenu', e => {
     e.preventDefault();
     const rect = twoDCanvas.getBoundingClientRect();
-    let mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2 - camera2D.x;
-    let mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2 - camera2D.y;
+    const mouseScreenX = e.clientX - rect.left;
+    const mouseScreenY = e.clientY - rect.top;
 
-    mouseX /= camera2D.zoom;
-    mouseY /= camera2D.zoom;
+    const centerX = mouseScreenX - twoDCanvas.width / 2;
+    const centerY = mouseScreenY - twoDCanvas.height / 2;
+
+    const worldX = (centerX - camera2D.x) / camera2D.zoom;
+    const worldY = (centerY - camera2D.y) / camera2D.zoom;
 
     let clickedBlock = null;
     for (let i = yardBlocks.length - 1; i >= 0; i--) {
       const b = yardBlocks[i];
-      const halfW = b.columns * 10;
-      const halfH = b.rows * 10;
-      if (mouseX >= b.x - halfW && mouseX <= b.x + halfW &&
-          mouseY >= b.y - halfH && mouseY <= b.y + halfH) {
+      const halfW = b.columns * (WORLD_SCALE / 2);
+      const halfH = b.rows * (WORLD_SCALE / 2);
+      if (worldX >= b.x - halfW && worldX <= b.x + halfW &&
+          worldY >= b.y - halfH && worldY <= b.y + halfH) {
         clickedBlock = b;
         break;
       }
@@ -464,34 +461,47 @@ twoDCanvas.addEventListener('mouseup', () => {
 
       const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
-      const locMatch = locationRaw.match(/Y\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
+      const locMatch = locationRaw.match(/([A-Za-z]+)\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
       if (!locMatch) {
         console.warn(`Invalid location: "${locationRaw}"`);
         continue;
       }
 
-      const rawNum = parseInt(locMatch[1]);
-      const letter = locMatch[2].toUpperCase();
-      const stackHeight = parseInt(locMatch[3]) || 1;
+      const blockName = locMatch[1].toUpperCase();
+      const rawNum = parseInt(locMatch[2]);
+      const letter = locMatch[3].toUpperCase();
+      const stackHeight = parseInt(locMatch[4]) || 1;
 
       if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
-        console.warn(`Skipped even/invalid column: ${rawNum}`);
+        console.warn(`Skipped invalid column: ${rawNum}`);
         continue;
       }
 
       const index = (rawNum - 9) / 2;
       const letIdx = 'ABCDEFG'.indexOf(letter);
 
-      if (index < 0 || index >= 16 || letIdx === -1 || stackHeight < 1) {
+      if (index < 0 || letIdx === -1 || stackHeight < 1) {
         console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
         continue;
       }
 
-      const x = index * cellWidth - (16 * cellWidth / 2) + cellWidth / 2;
-      const z = letIdx * cellDepth - (7 * cellDepth / 2) + cellDepth / 2;
+      // Find the block by name
+      const targetBlock = yardBlocks.find(b => b.name.toUpperCase() === blockName);
+      if (!targetBlock) {
+        console.warn(`Block "${blockName}" not found`);
+        continue;
+      }
 
-      // TODO: place container in correct block (future step)
+      // Calculate local position within the block
+      const localX = index * cellWidth - (targetBlock.columns * cellWidth / 2) + cellWidth / 2;
+      const localZ = letIdx * cellDepth - (targetBlock.rows * cellDepth / 2) + cellDepth / 2;
 
+      // World position = block position + local offset
+      const worldX = targetBlock.x * cellWidth + localX;
+      const worldZ = targetBlock.y * cellDepth + localZ;
+
+      // TODO: create container mesh at (worldX, stackHeight * 8.5, worldZ)
+      // For now just count
       placedCount++;
     }
 
