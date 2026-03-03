@@ -295,8 +295,8 @@ twoDCanvas.addEventListener('mousemove', e => {
   let mouseScreenY = e.clientY - rect.top;
 
   // 2. Convert to center-relative (this is what translate() applies)
-  let mouseCenterX = mouseScreenX - twoDCanvas.width / 2;
-  let mouseCenterY = mouseScreenY - twoDCanvas.height / 2;
+  let mouseCenterX = mouseScreenX - twoDCanvas.width / 1;
+  let mouseCenterY = mouseScreenY - twoDCanvas.height / 1;
 
   // 3. Apply inverse transform: undo translate (subtract pan) then undo scale (divide by zoom)
   let mouseWorldX = (mouseCenterX - camera2D.x) ;
@@ -327,8 +327,8 @@ twoDCanvas.addEventListener('mousedown', e => {
   let mouseScreenY = e.clientY - rect.top;
 
   // Center relative
-  let mouseCenterX = mouseScreenX - twoDCanvas.width / 2;
-  let mouseCenterY = mouseScreenY - twoDCanvas.height / 2;
+  let mouseCenterX = mouseScreenX - twoDCanvas.width / 1;
+  let mouseCenterY = mouseScreenY - twoDCanvas.height / 1;
 
   // Apply inverse pan + zoom to get world position
 // Apply inverse transform correctly (match mousemove)
