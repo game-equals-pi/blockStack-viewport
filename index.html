@@ -334,8 +334,9 @@ twoDCanvas.addEventListener('mousedown', e => {
   let mouseCenterY = mouseScreenY - twoDCanvas.height / 2;
 
   // Apply inverse pan + zoom to get world position
-  let mouseWorldX = mouseCenterX / camera2D.zoom - camera2D.x;
-  let mouseWorldY = mouseCenterY / camera2D.zoom - camera2D.y;
+// Apply inverse transform correctly (match mousemove)
+let mouseWorldX = (mouseCenterX - camera2D.x) / camera2D.zoom;
+let mouseWorldY = (mouseCenterY - camera2D.y) / camera2D.zoom;
 
   console.log('--- Click Debug ---');
   console.log('Screen click:', mouseScreenX.toFixed(0), mouseScreenY.toFixed(0));
