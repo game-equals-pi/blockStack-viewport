@@ -289,10 +289,16 @@ twoDCanvas.addEventListener('mousemove', e => {
   if (!isDragging || !selectedBlock) return;
 
   const rect = twoDCanvas.getBoundingClientRect();
-  let mouseCenterX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-  let mouseCenterY = (e.clientY - rect.top) - twoDCanvas.height / 2;
 
-  // Same conversion as in mousedown
+  // 1. Get mouse position relative to canvas top-left
+  let mouseScreenX = e.clientX - rect.left;
+  let mouseScreenY = e.clientY - rect.top;
+
+  // 2. Convert to center-relative (this is what translate() applies)
+  let mouseCenterX = mouseScreenX - twoDCanvas.width / 2;
+  let mouseCenterY = mouseScreenY - twoDCanvas.height / 2;
+
+  // 3. Apply inverse transform: undo translate (subtract pan) then undo scale (divide by zoom)
   let mouseWorldX = (mouseCenterX - camera2D.x) / camera2D.zoom;
   let mouseWorldY = (mouseCenterY - camera2D.y) / camera2D.zoom;
 
@@ -302,9 +308,9 @@ twoDCanvas.addEventListener('mousemove', e => {
 
   draw2DYard();
 
-  // Optional: log during drag to see live movement
-  console.log('Drag update - world mouse:', mouseWorldX.toFixed(2), mouseWorldY.toFixed(2),
-              '→ new block pos:', selectedBlock.x.toFixed(2), selectedBlock.y.toFixed(2));
+  // Debug during drag (remove later if you want)
+  console.log('Drag: world mouse', mouseWorldX.toFixed(2), mouseWorldY.toFixed(2),
+              '→ block now at', selectedBlock.x.toFixed(2), selectedBlock.y.toFixed(2));
 });
 
   twoDCanvas.addEventListener('mouseup', e => {
