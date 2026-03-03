@@ -461,14 +461,14 @@
 
     const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
-    // Flexible parse: allow optional block prefix
+    // Parse with optional block prefix
     const locMatch = locationRaw.match(/([A-Za-z]+)?\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
     if (!locMatch) {
       console.warn(`Invalid location: "${locationRaw}"`);
       continue;
     }
 
-    const blockName = (locMatch[1] || 'Y').toUpperCase();  // default to Y if no prefix
+    const blockName = (locMatch[1] || 'Y').toUpperCase();
     const rawNum = parseInt(locMatch[2]);
     const letter = locMatch[3].toUpperCase();
     const stackHeight = parseInt(locMatch[4]) || 1;
@@ -489,51 +489,50 @@
     // Find target block
     const targetBlock = yardBlocks.find(b => b.name.toUpperCase() === blockName);
     if (!targetBlock) {
-      console.warn(`Block "${blockName}" not found for container ${containerNum}`);
+      console.warn(`Block "${blockName}" not found for ${containerNum}`);
       continue;
     }
 
-    // Local position inside block
+    // Get the 3D group for this block (created on save)
+    const blockObj = block3DObjects[targetBlock.id];
+    if (!blockObj || !blockObj.group) {
+      console.warn(`3D group not found for block ${blockName} — save layout first?`);
+      continue;
+    }
+
+    const blockGroup = blockObj.group;
+
+    // Local position inside block (relative to block center)
     const localX = bayIndex * cellWidth - (targetBlock.columns * cellWidth / 2) + cellWidth / 2;
     const localZ = rowIndex * cellDepth - (targetBlock.rows * cellDepth / 2) + cellDepth / 2;
-
-    // World position = block position + local offset
-    const worldX = targetBlock.x * cellWidth + localX;
-    const worldZ = targetBlock.y * cellDepth + localZ;
 
     // Container dimensions
     const contLength = group.toLowerCase().includes('40') ? 40 : 20;
     const contWidth = 10;
     const contHeight = 8.5;
 
-    // Y position = stack height * height (bottom of this container)
+    // Stack height offset
     const yBase = (stackHeight - 1) * contHeight;
 
-    // Create geometry & material
+    // Create container
     const contGeo = new THREE.BoxGeometry(contLength, contHeight, contWidth);
-    const color = group.toLowerCase().includes('40') ? 0xff8800 : 0x00aaff; // orange for 40ft, blue for 20ft
+    const color = group.toLowerCase().includes('40') ? 0xff8800 : 0x00aaff; // orange=40ft, blue=20ft
     const contMat = new THREE.MeshStandardMaterial({ color });
     const contMesh = new THREE.Mesh(contGeo, contMat);
 
-    // Position (centered in bay, stacked)
-    contMesh.position.set(
-      worldX,
-      yBase + contHeight / 2,
-      worldZ
-    );
+    // Position relative to block center
+    contMesh.position.set(localX, yBase + contHeight / 2, localZ);
 
-    // Optional rotation if block is rotated
-    contMesh.rotation.y = targetBlock.rotation * Math.PI / 180;
+    // Optional: rotate with block
+    // (no need — since it's child of group, it inherits rotation automatically)
 
-    scene.add(contMesh);
-
-    // Simple label (optional - can improve later)
-    // loader.load(... for text if you want container number on top
+    // Add to block group (moves with block!)
+    blockGroup.add(contMesh);
 
     placedCount++;
   }
 
-  console.log(`Placed ${placedCount} containers successfully`);
+  console.log(`Placed ${placedCount} containers into blocks`);
   pasteModal.style.display = 'none';
   document.getElementById('paste-textarea').value = '';
 });
