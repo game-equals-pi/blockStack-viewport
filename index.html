@@ -256,113 +256,113 @@
   }
 
   // ─── Mouse Controls ────────────────────────────────────────────
-  twoDCanvas.addEventListener('wheel', e => {
+// Global scale constant (used for block drawing & hit detection)
+const WORLD_SCALE = 20;  // pixels per world unit
+
+// ─── Wheel Zoom ────────────────────────────────────────────────
+twoDCanvas.addEventListener('wheel', e => {
+  e.preventDefault();
+
+  const rect = twoDCanvas.getBoundingClientRect();
+  const mouseScreenX = e.clientX - rect.left;
+  const mouseScreenY = e.clientY - rect.top;
+
+  // Center-relative mouse before zoom
+  const preZoomX = mouseScreenX - twoDCanvas.width / 2 - camera2D.x;
+  const preZoomY = mouseScreenY - twoDCanvas.height / 2 - camera2D.y;
+
+  const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const oldZoom = camera2D.zoom;
+  camera2D.zoom *= zoomFactor;
+
+  // Keep zoom centered on mouse
+  camera2D.x = mouseScreenX - twoDCanvas.width / 2 - preZoomX * (camera2D.zoom / oldZoom);
+  camera2D.y = mouseScreenY - twoDCanvas.height / 2 - preZoomY * (camera2D.zoom / oldZoom);
+
+  draw2DYard();
+});
+
+// ─── Pan (middle mouse) ────────────────────────────────────────
+let isPanning = false;
+let panStartX = 0, panStartY = 0;
+
+twoDCanvas.addEventListener('mousedown', e => {
+  if (e.button === 1) { // middle mouse
+    isPanning = true;
+    panStartX = e.clientX - camera2D.x;
+    panStartY = e.clientY - camera2D.y;
+    twoDCanvas.style.cursor = 'grabbing';
     e.preventDefault();
-    const rect = twoDCanvas.getBoundingClientRect();
-    const mouseX = (e.clientX - rect.left) - twoDCanvas.width / 2;
-    const mouseY = (e.clientY - rect.top) - twoDCanvas.height / 2;
+  }
+});
 
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
-    const oldZoom = camera2D.zoom;
-    camera2D.zoom *= zoomFactor;
-
-    camera2D.x = mouseX - (mouseX - camera2D.x) * (camera2D.zoom / oldZoom);
-    camera2D.y = mouseY - (mouseY - camera2D.y) * (camera2D.zoom / oldZoom);
-
+twoDCanvas.addEventListener('mousemove', e => {
+  if (isPanning) {
+    camera2D.x = e.clientX - panStartX;
+    camera2D.y = e.clientY - panStartY;
     draw2DYard();
-  });
+  }
+});
 
-  let isPanning = false;
-  let panStartX = 0, panStartY = 0;
+twoDCanvas.addEventListener('mouseup', e => {
+  if (e.button === 1) {
+    isPanning = false;
+    twoDCanvas.style.cursor = 'default';
+  }
+});
 
-  twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button === 1) {
-      isPanning = true;
-      panStartX = e.clientX - camera2D.x;
-      panStartY = e.clientY - camera2D.y;
-      twoDCanvas.style.cursor = 'grabbing';
-      e.preventDefault();
+// ─── Drag Block (left mouse) ───────────────────────────────────
+twoDCanvas.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+
+  const rect = twoDCanvas.getBoundingClientRect();
+  const mouseScreenX = e.clientX - rect.left;
+  const mouseScreenY = e.clientY - rect.top;
+
+  // Convert screen → center-relative → world
+  const centerX = mouseScreenX - twoDCanvas.width / 2;
+  const centerY = mouseScreenY - twoDCanvas.height / 2;
+  const worldX = (centerX - camera2D.x) / camera2D.zoom;
+  const worldY = (centerY - camera2D.y) / camera2D.zoom;
+
+  selectedBlock = null;
+  for (let i = yardBlocks.length - 1; i >= 0; i--) {
+    const b = yardBlocks[i];
+    const halfW = b.columns * (WORLD_SCALE / 2);
+    const halfH = b.rows * (WORLD_SCALE / 2);
+
+    if (worldX >= b.x - halfW && worldX <= b.x + halfW &&
+        worldY >= b.y - halfH && worldY <= b.y + halfH) {
+      selectedBlock = b;
+      isDragging = true;
+      dragOffsetX = worldX - b.x;
+      dragOffsetY = worldY - b.y;
+      break;
     }
-  });
+  }
+});
 
 twoDCanvas.addEventListener('mousemove', e => {
   if (!isDragging || !selectedBlock) return;
 
   const rect = twoDCanvas.getBoundingClientRect();
+  const mouseScreenX = e.clientX - rect.left;
+  const mouseScreenY = e.clientY - rect.top;
 
-  // 1. Get mouse position relative to canvas top-left
-  let mouseScreenX = e.clientX - rect.left;
-  let mouseScreenY = e.clientY - rect.top;
+  const centerX = mouseScreenX - twoDCanvas.width / 2;
+  const centerY = mouseScreenY - twoDCanvas.height / 2;
+  const worldX = (centerX - camera2D.x) / camera2D.zoom;
+  const worldY = (centerY - camera2D.y) / camera2D.zoom;
 
-  // 2. Convert to center-relative (this is what translate() applies)
-  let mouseCenterX = mouseScreenX - twoDCanvas.width / 1;
-  let mouseCenterY = mouseScreenY - twoDCanvas.height / 1;
-
-  // 3. Apply inverse transform: undo translate (subtract pan) then undo scale (divide by zoom)
-  let mouseWorldX = (mouseCenterX - camera2D.x) ;
-  let mouseWorldY = (mouseCenterY - camera2D.y) ;
-
-  // Update block position in world space
-  selectedBlock.x = mouseWorldX - dragOffsetX;
-  selectedBlock.y = mouseWorldY - dragOffsetY;
+  selectedBlock.x = worldX - dragOffsetX;
+  selectedBlock.y = worldY - dragOffsetY;
 
   draw2DYard();
+});
 
-  });
-
-  twoDCanvas.addEventListener('mouseup', e => {
-    if (e.button === 1) {
-      isPanning = false;
-      twoDCanvas.style.cursor = 'default';
-    }
-  });
-
-  // ─── Block Dragging ────────────────────────────────────────────
- // ─── Block Dragging ────────────────────────────────────────────
-twoDCanvas.addEventListener('mousedown', e => {
-  if (e.button !== 0) return;
-
-  const rect = twoDCanvas.getBoundingClientRect();
-  let mouseScreenX = e.clientX - rect.left;
-  let mouseScreenY = e.clientY - rect.top;
-
-  // Center relative
-  let mouseCenterX = mouseScreenX - twoDCanvas.width / 1;
-  let mouseCenterY = mouseScreenY - twoDCanvas.height / 1;
-
-  // Apply inverse pan + zoom to get world position
-// Apply inverse transform correctly (match mousemove)
-let mouseWorldX = (mouseCenterX - camera2D.x);
-let mouseWorldY = (mouseCenterY - camera2D.y);
-
-  console.log('--- Click Debug ---');
-  console.log('Screen click:', mouseScreenX.toFixed(0), mouseScreenY.toFixed(0));
-  console.log('Center relative:', mouseCenterX.toFixed(2), mouseCenterY.toFixed(2));
-  console.log('World position (for hit):', mouseWorldX.toFixed(2), mouseWorldY.toFixed(2));
-  console.log('Current camera pan/zoom:', camera2D.x.toFixed(2), camera2D.y.toFixed(2), camera2D.zoom.toFixed(2));
-
+twoDCanvas.addEventListener('mouseup', () => {
+  isDragging = false;
   selectedBlock = null;
-  for (let i = yardBlocks.length - 1; i >= 0; i--) {
-    const b = yardBlocks[i];
-    const halfW = b.columns * 10;
-    const halfH = b.rows * 10;
-
-    const isHit = mouseWorldX >= b.x - halfW && mouseWorldX <= b.x + halfW &&
-                  mouseWorldY >= b.y - halfH && mouseWorldY <= b.y + halfH;
-
-    console.log(`Block ${b.name} at (${b.x.toFixed(2)}, ${b.y.toFixed(2)}): hit = ${isHit}`);
-
-    if (isHit) {
-      selectedBlock = b;
-      isDragging = true;
-      dragOffsetX = mouseWorldX - b.x;
-      dragOffsetY = mouseWorldY - b.y;
-      console.log('HIT! Offset:', dragOffsetX.toFixed(2), dragOffsetY.toFixed(2));
-      break;
-    }
-  }
-
-  if (!selectedBlock) console.log('Missed all blocks');
 });
   // ─── Right-click Delete/Rotate ─────────────────────────────────
   twoDCanvas.addEventListener('contextmenu', e => {
