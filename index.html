@@ -445,71 +445,98 @@
     pasteModal.style.display = 'none';
   });
 
-  submitPaste.addEventListener('click', () => {
-    const data = document.getElementById('paste-textarea').value.trim();
-    if (!data) return;
+ submitPaste.addEventListener('click', () => {
+  const data = document.getElementById('paste-textarea').value.trim();
+  if (!data) return;
 
-    const lines = data.split('\n').map(l => l.trim()).filter(l => l);
-    let start = 0;
-    if (lines[0]?.toLowerCase().includes('container')) start = 1;
+  const lines = data.split('\n').map(l => l.trim()).filter(l => l);
+  let start = 0;
+  if (lines[0]?.toLowerCase().includes('container')) start = 1;
 
-    let placedCount = 0;
+  let placedCount = 0;
 
-    for (let i = start; i < lines.length; i++) {
-      const cols = lines[i].split('\t');
-      if (cols.length < 4) continue;
+  for (let i = start; i < lines.length; i++) {
+    const cols = lines[i].split('\t');
+    if (cols.length < 4) continue;
 
-      const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
+    const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
-      const locMatch = locationRaw.match(/([A-Za-z]+)\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
-      if (!locMatch) {
-        console.warn(`Invalid location: "${locationRaw}"`);
-        continue;
-      }
-
-      const blockName = locMatch[1].toUpperCase();
-      const rawNum = parseInt(locMatch[2]);
-      const letter = locMatch[3].toUpperCase();
-      const stackHeight = parseInt(locMatch[4]) || 1;
-
-      if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
-        console.warn(`Skipped invalid column: ${rawNum}`);
-        continue;
-      }
-
-      const index = (rawNum - 9) / 2;
-      const letIdx = 'ABCDEFG'.indexOf(letter);
-
-      if (index < 0 || letIdx === -1 || stackHeight < 1) {
-        console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
-        continue;
-      }
-
-      // Find the block by name
-      const targetBlock = yardBlocks.find(b => b.name.toUpperCase() === blockName);
-      if (!targetBlock) {
-        console.warn(`Block "${blockName}" not found`);
-        continue;
-      }
-
-      // Calculate local position within the block
-      const localX = index * cellWidth - (targetBlock.columns * cellWidth / 2) + cellWidth / 2;
-      const localZ = letIdx * cellDepth - (targetBlock.rows * cellDepth / 2) + cellDepth / 2;
-
-      // World position = block position + local offset
-      const worldX = targetBlock.x * cellWidth + localX;
-      const worldZ = targetBlock.y * cellDepth + localZ;
-
-      // TODO: create container mesh at (worldX, stackHeight * 8.5, worldZ)
-      // For now just count
-      placedCount++;
+    // Flexible parse: allow optional block prefix
+    const locMatch = locationRaw.match(/([A-Za-z]+)?\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
+    if (!locMatch) {
+      console.warn(`Invalid location: "${locationRaw}"`);
+      continue;
     }
 
-    console.log(`Placed ${placedCount} containers`);
-    pasteModal.style.display = 'none';
-    document.getElementById('paste-textarea').value = '';
-  });
+    const blockName = (locMatch[1] || 'Y').toUpperCase();  // default to Y if no prefix
+    const rawNum = parseInt(locMatch[2]);
+    const letter = locMatch[3].toUpperCase();
+    const stackHeight = parseInt(locMatch[4]) || 1;
 
+    if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
+      console.warn(`Skipped invalid column: ${rawNum}`);
+      continue;
+    }
+
+    const bayIndex = (rawNum - 9) / 2;
+    const rowIndex = 'ABCDEFG'.indexOf(letter);
+
+    if (bayIndex < 0 || rowIndex === -1 || stackHeight < 1) {
+      console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
+      continue;
+    }
+
+    // Find target block
+    const targetBlock = yardBlocks.find(b => b.name.toUpperCase() === blockName);
+    if (!targetBlock) {
+      console.warn(`Block "${blockName}" not found for container ${containerNum}`);
+      continue;
+    }
+
+    // Local position inside block
+    const localX = bayIndex * cellWidth - (targetBlock.columns * cellWidth / 2) + cellWidth / 2;
+    const localZ = rowIndex * cellDepth - (targetBlock.rows * cellDepth / 2) + cellDepth / 2;
+
+    // World position = block position + local offset
+    const worldX = targetBlock.x * cellWidth + localX;
+    const worldZ = targetBlock.y * cellDepth + localZ;
+
+    // Container dimensions
+    const contLength = group.toLowerCase().includes('40') ? 40 : 20;
+    const contWidth = 10;
+    const contHeight = 8.5;
+
+    // Y position = stack height * height (bottom of this container)
+    const yBase = (stackHeight - 1) * contHeight;
+
+    // Create geometry & material
+    const contGeo = new THREE.BoxGeometry(contLength, contHeight, contWidth);
+    const color = group.toLowerCase().includes('40') ? 0xff8800 : 0x00aaff; // orange for 40ft, blue for 20ft
+    const contMat = new THREE.MeshStandardMaterial({ color });
+    const contMesh = new THREE.Mesh(contGeo, contMat);
+
+    // Position (centered in bay, stacked)
+    contMesh.position.set(
+      worldX,
+      yBase + contHeight / 2,
+      worldZ
+    );
+
+    // Optional rotation if block is rotated
+    contMesh.rotation.y = targetBlock.rotation * Math.PI / 180;
+
+    scene.add(contMesh);
+
+    // Simple label (optional - can improve later)
+    // loader.load(... for text if you want container number on top
+
+    placedCount++;
+  }
+
+  console.log(`Placed ${placedCount} containers successfully`);
+  pasteModal.style.display = 'none';
+  document.getElementById('paste-textarea').value = '';
+});
   // ─── Settings & Navigation ─────────────────────────────────────
   const settingsButton = document.getElementById('settings-button');
   const settingsMenu = document.getElementById('settings-menu');
