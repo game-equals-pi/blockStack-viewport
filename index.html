@@ -462,72 +462,74 @@
     const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
 
     // Parse with optional block prefix
-    const locMatch = locationRaw.match(/([A-Za-z]+)?\s*[_-]?\s*(\d+)\s*([A-Ga-g])\s*(\d+)/i);
+    // Examples it handles:
+    //   NewBlock 15C 3
+    //   X 5D 2
+    //   39G 1           ← no prefix → defaults to 'Y'
+    const locMatch = locationRaw.match(/^([A-Za-z0-9]+)?\s*([0-9]+)\s*([A-Ga-g])\s*([0-9]+)$/i);
     if (!locMatch) {
-      console.warn(`Invalid location: "${locationRaw}"`);
+      console.warn(`Invalid location format: "${locationRaw}"`);
       continue;
     }
 
     const blockName = (locMatch[1] || 'Y').toUpperCase();
-    const rawNum = parseInt(locMatch[2]);
-    const letter = locMatch[3].toUpperCase();
-    const stackHeight = parseInt(locMatch[4]) || 1;
+    const rawBay   = parseInt(locMatch[2]);
+    const rowLetter = locMatch[3].toUpperCase();
+    const stackLvl  = parseInt(locMatch[4]) || 1;
 
-    if (rawNum < 9 || rawNum > 39 || rawNum % 2 !== 1) {
-      console.warn(`Skipped invalid column: ${rawNum}`);
+    if (rawBay < 9 || rawBay > 39 || rawBay % 2 !== 1) {
+      console.warn(`Invalid bay number: ${rawBay}`);
       continue;
     }
 
-    const bayIndex = (rawNum - 9) / 2;
-    const rowIndex = 'ABCDEFG'.indexOf(letter);
+    const bayIndex = (rawBay - 9) / 2;
+    const rowIndex = 'ABCDEFG'.indexOf(rowLetter);
 
-    if (bayIndex < 0 || rowIndex === -1 || stackHeight < 1) {
-      console.warn(`Out of bounds: col=${rawNum}, row=${letter}`);
+    if (bayIndex < 0 || rowIndex === -1 || stackLvl < 1) {
+      console.warn(`Out of bounds: bay=${rawBay}, row=${rowLetter}`);
       continue;
     }
 
-    // Find target block
+    // Find the block by name
     const targetBlock = yardBlocks.find(b => b.name.toUpperCase() === blockName);
     if (!targetBlock) {
-      console.warn(`Block "${blockName}" not found for ${containerNum}`);
+      console.warn(`Block "${blockName}" not found for container ${containerNum}`);
       continue;
     }
 
-    // Get the 3D group for this block (created on save)
+    // Get the live 3D group (must have saved layout at least once)
     const blockObj = block3DObjects[targetBlock.id];
     if (!blockObj || !blockObj.group) {
-      console.warn(`3D group not found for block ${blockName} — save layout first?`);
+      console.warn(`No 3D group for block "${blockName}" — please save layout first`);
       continue;
     }
 
     const blockGroup = blockObj.group;
 
-    // Local position inside block (relative to block center)
+    // Local position inside the block
     const localX = bayIndex * cellWidth - (targetBlock.columns * cellWidth / 2) + cellWidth / 2;
     const localZ = rowIndex * cellDepth - (targetBlock.rows * cellDepth / 2) + cellDepth / 2;
 
-    // Container dimensions
-    const contLength = group.toLowerCase().includes('40') ? 40 : 20;
-    const contWidth = 10;
-    const contHeight = 8.5;
+    // Container size
+    const is40ft = group.toLowerCase().includes('40');
+    const length = is40ft ? 40 : 20;
+    const width  = 10;
+    const height = 8.5;
 
-    // Stack height offset
-    const yBase = (stackHeight - 1) * contHeight;
+    const yBase = (stackLvl - 1) * height;
 
-    // Create container
-    const contGeo = new THREE.BoxGeometry(contLength, contHeight, contWidth);
-    const color = group.toLowerCase().includes('40') ? 0xff8800 : 0x00aaff; // orange=40ft, blue=20ft
-    const contMat = new THREE.MeshStandardMaterial({ color });
-    const contMesh = new THREE.Mesh(contGeo, contMat);
+    // Create mesh
+    const geo = new THREE.BoxGeometry(length, height, width);
+    const mat = new THREE.MeshStandardMaterial({
+      color: is40ft ? 0xff8800 : 0x00aaff   // orange=40ft, blue=20ft
+    });
+    const mesh = new THREE.Mesh(geo, mat);
 
-    // Position relative to block center
-    contMesh.position.set(localX, yBase + contHeight / 2, localZ);
+    // Position in **local block space**
+    mesh.position.set(localX, yBase + height / 2, localZ);
 
-    // Optional: rotate with block
-    // (no need — since it's child of group, it inherits rotation automatically)
-
-    // Add to block group (moves with block!)
-    blockGroup.add(contMesh);
+    // Add as child → moves/rotates with block
+    blockGroup.add(mesh);
 
     placedCount++;
   }
