@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>2D Tiled Map – Pan & Zoom</title>
+  <title>Empty Tiled Grid – Pan & Zoom</title>
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      background: #111;
+      background: #0a140a;
       font-family: Arial, Helvetica, sans-serif;
       height: 100vh;
     }
@@ -19,18 +19,19 @@
       position: absolute;
       top: 10px;
       left: 10px;
-      color: white;
-      background: rgba(0,0,0,0.5);
+      color: #88ff88;
+      background: rgba(0,0,0,0.6);
       padding: 8px 12px;
       border-radius: 6px;
       user-select: none;
       pointer-events: none;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
 
-<div id="ui">Scroll to zoom · Right-click + drag to pan</div>
+<div id="ui">Scroll to zoom · Right-click drag to pan</div>
 <canvas id="c"></canvas>
 
 <script>
@@ -40,22 +41,22 @@ const ctx = canvas.getContext('2d');
 
 let width, height;
 
-// Viewport / camera
+// Camera / view
 let camera = {
   x: 0,
   y: 0,
   zoom: 1.0,
-  zoomMin: 0.4,
-  zoomMax: 8.0
+  zoomMin: 0.3,
+  zoomMax: 12.0
 };
 
-// Mouse state
+// Mouse
 let isDragging = false;
 let lastMouse = { x: 0, y: 0 };
 
-// World settings
-const TILE_SIZE = 64;           // pixels per tile at zoom=1
-const MAP_WIDTH_TILES  = 80;    // how wide is the world
+// World grid settings
+const TILE_SIZE = 64;
+const MAP_WIDTH_TILES  = 80;
 const MAP_HEIGHT_TILES = 60;
 
 // ────────────────────────────────────────────────
@@ -70,70 +71,61 @@ resize();
 // ────────────────────────────────────────────────
 function worldToScreen(wx, wy) {
   return {
-    x: (wx - camera.x) * camera.zoom + width/2,
-    y: (wy - camera.y) * camera.zoom + height/2
+    x: (wx - camera.x) * camera.zoom + width  / 2,
+    y: (wy - camera.y) * camera.zoom + height / 2
   };
 }
 
 function screenToWorld(sx, sy) {
   return {
-    x: (sx - width/2) / camera.zoom + camera.x,
-    y: (sy - height/2) / camera.zoom + camera.y
+    x: (sx - width / 2)  / camera.zoom + camera.x,
+    y: (sy - height / 2) / camera.zoom + camera.y
   };
 }
 
 // ────────────────────────────────────────────────
 function draw() {
-  ctx.fillStyle = '#0a1f0a';
+  // Dark background
+  ctx.fillStyle = '#0a140a';
   ctx.fillRect(0, 0, width, height);
 
-  // Grid
-  ctx.strokeStyle = 'rgba(100,180,100,0.25)';
+  ctx.strokeStyle = 'rgba(80, 140, 80, 0.4)';   // subtle green grid
   ctx.lineWidth = 1;
 
+  // Visible world bounds in screen space
   const left   = screenToWorld(0, 0).x;
   const right  = screenToWorld(width, 0).x;
   const top    = screenToWorld(0, 0).y;
   const bottom = screenToWorld(0, height).y;
 
+  // Start from the tile-aligned position before the top-left
   const startX = Math.floor(left / TILE_SIZE) * TILE_SIZE;
   const startY = Math.floor(top  / TILE_SIZE) * TILE_SIZE;
 
-  for (let wx = startX; wx < right + TILE_SIZE; wx += TILE_SIZE) {
-    for (let wy = startY; wy < bottom + TILE_SIZE; wy += TILE_SIZE) {
+  for (let wx = startX; wx <= right + TILE_SIZE; wx += TILE_SIZE) {
+    for (let wy = startY; wy <= bottom + TILE_SIZE; wy += TILE_SIZE) {
       const tx = Math.floor(wx / TILE_SIZE);
       const ty = Math.floor(wy / TILE_SIZE);
 
-      // Simple procedural coloring
-      let color;
-      if (tx < 0 || ty < 0 || tx >= MAP_WIDTH_TILES || ty >= MAP_HEIGHT_TILES) {
-        color = '#1a2a1a'; // out of bounds
-      } else {
-        const hash = (tx * 374761393 + ty * 668265263) | 0;
-        const r = 90 + (hash % 40);
-        const g = 140 + ((hash >> 8) % 50);
-        const b = 80 + ((hash >> 16) % 40);
-        color = `rgb(${r},${g},${b})`;
-      }
-
       const s = worldToScreen(wx, wy);
-      ctx.fillStyle = color;
-      ctx.fillRect(s.x, s.y, TILE_SIZE * camera.zoom + 1, TILE_SIZE * camera.zoom + 1);
+      const tileSizeZoomed = TILE_SIZE * camera.zoom;
 
-      // optional grid lines
-      ctx.strokeRect(s.x, s.y, TILE_SIZE * camera.zoom, TILE_SIZE * camera.zoom);
+      // Only draw grid if inside map bounds (optional — remove condition to show infinite grid)
+      if (tx >= 0 && ty >= 0 && tx < MAP_WIDTH_TILES && ty < MAP_HEIGHT_TILES) {
+        ctx.strokeRect(s.x, s.y, tileSizeZoomed, tileSizeZoomed);
+      }
     }
   }
 
-  // Optional: draw origin cross
+  // Origin crosshair
   const o = worldToScreen(0, 0);
-  ctx.strokeStyle = 'rgba(255,80,80,0.7)';
+  ctx.strokeStyle = 'rgba(255, 60, 60, 0.8)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(o.x - 20, o.y);
-  ctx.lineTo(o.x + 20, o.y);
-  ctx.moveTo(o.x, o.y - 20);
-  ctx.lineTo(o.x, o.y + 20);
+  ctx.moveTo(o.x - 24, o.y);
+  ctx.lineTo(o.x + 24, o.y);
+  ctx.moveTo(o.x, o.y - 24);
+  ctx.lineTo(o.x, o.y + 24);
   ctx.stroke();
 }
 
@@ -143,13 +135,11 @@ canvas.addEventListener('wheel', e => {
 
   const before = screenToWorld(e.offsetX, e.offsetY);
 
-  // zoom
-  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  const factor = e.deltaY < 0 ? 1.14 : 1 / 1.14;
   camera.zoom = Math.max(camera.zoomMin, Math.min(camera.zoomMax, camera.zoom * factor));
 
   const after = screenToWorld(e.offsetX, e.offsetY);
 
-  // keep cursor point fixed
   camera.x += before.x - after.x;
   camera.y += before.y - after.y;
 
@@ -157,7 +147,7 @@ canvas.addEventListener('wheel', e => {
 });
 
 canvas.addEventListener('mousedown', e => {
-  if (e.button === 2) {           // right click
+  if (e.button === 2) {
     isDragging = true;
     lastMouse.x = e.clientX;
     lastMouse.y = e.clientY;
@@ -187,12 +177,10 @@ window.addEventListener('mouseup', e => {
   }
 });
 
-window.addEventListener('contextmenu', e => {
-  e.preventDefault(); // stop right-click menu
-});
+window.addEventListener('contextmenu', e => e.preventDefault());
 
-// ────────────────────────────────────────────────
-draw(); // first draw
+// Initial draw
+draw();
 
 </script>
 </body>
