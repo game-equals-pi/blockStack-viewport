@@ -1,574 +1,199 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Y Block – 3D Viewport</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>2D Tiled Map – Pan & Zoom</title>
   <style>
-    body { margin:0; overflow:hidden; font-family: Arial, sans-serif; background:#000; }
-    #three-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; z-index: 10; }
-    #two-d-page { position: absolute; top: 0; left: 0; z-index: 20; display: none; background: #88aaff; width: 100%; height: 100%; }
-    #two-d-canvas { width: 100%; height: 100%; display: block; cursor: default; pointer-events: auto; }
-    #settings-button { position: absolute; top: 20px; left: 20px; z-index: 130; padding: 10px; background: #333; color: white; border: none; border-radius: 50%; cursor: pointer; font-size: 20px; }
-    #settings-menu { position: absolute; top: 60px; left: 20px; z-index: 130; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; display: none; color: white; }
-    #settings-menu button { display: block; width: 100%; padding: 10px; margin: 5px 0; background: #007bff; color: white; border: none; cursor: pointer; }
-    #paste-button { position: absolute; top: 20px; right: 20px; z-index: 130; padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; }
-    #paste-button:hover { background: #0056b3; }
-    #paste-modal { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(255,255,255,0.95); padding: 25px; border-radius: 10px; width: 420px; max-width: 90%; z-index: 140; display: none; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-    #paste-textarea { width: 100%; height: 220px; margin: 15px 0; font-family: monospace; }
-    #submit-paste, #close-modal { padding: 10px 20px; margin: 8px; cursor: pointer; font-size: 14px; }
-    #back-button { position: absolute; top: 20px; left: 20px; z-index: 130; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    #add-block-button { position: absolute; top: 70px; left: 20px; z-index: 130; padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    #save-layout-button { position: absolute; top: 20px; right: 150px; z-index: 130; padding: 12px 24px; background: #ffc107; color: black; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+      font-family: Arial, Helvetica, sans-serif;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 12px;
+      border-radius: 6px;
+      user-select: none;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 
-<canvas id="three-canvas"></canvas>
+<div id="ui">Scroll to zoom · Right-click + drag to pan</div>
+<canvas id="c"></canvas>
 
-<div id="two-d-page">
-  <canvas id="two-d-canvas"></canvas>
-  <button id="back-button">Back to 3D</button>
-  <button id="add-block-button">Add New Block</button>
-  <button id="save-layout-button">Save Layout to 3D</button>
-</div>
+<script>
+// ────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
 
-<button id="settings-button">⚙</button>
-<div id="settings-menu">
-  <button id="yard-layout-button">Yard Layout</button>
-</div>
+let width, height;
 
-<button id="paste-button">Paste Excel Data</button>
+// Viewport / camera
+let camera = {
+  x: 0,
+  y: 0,
+  zoom: 1.0,
+  zoomMin: 0.4,
+  zoomMax: 8.0
+};
 
-<div id="paste-modal">
-  <h3>Paste Excel Data (Tab-separated from Excel)</h3>
-  <p>Expected columns: Container number, Voyage, Discharge port, Location (e.g. Y 39G 2), Group (20 or 40)</p>
-  <textarea id="paste-textarea" placeholder="Paste copied rows here..."></textarea>
-  <div>
-    <button id="submit-paste">Submit & Place Containers</button>
-    <button id="close-modal">Close</button>
-  </div>
-</div>
+// Mouse state
+let isDragging = false;
+let lastMouse = { x: 0, y: 0 };
 
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-  }
+// World settings
+const TILE_SIZE = 64;           // pixels per tile at zoom=1
+const MAP_WIDTH_TILES  = 80;    // how wide is the world
+const MAP_HEIGHT_TILES = 60;
+
+// ────────────────────────────────────────────────
+function resize() {
+  width = canvas.width = window.innerWidth;
+  height = canvas.height = window.innerHeight;
 }
-</script>
 
-<script type="module">
-  import * as THREE from 'three';
-  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-  import { FontLoader } from 'three/addons/loaders/FontLoader.js';
-  import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+window.addEventListener('resize', resize);
+resize();
 
-  // ─── 3D Scene Setup ────────────────────────────────────────────
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x88aaff);
-  scene.fog = new THREE.FogExp2(0x88aaff, 0.0008);
+// ────────────────────────────────────────────────
+function worldToScreen(wx, wy) {
+  return {
+    x: (wx - camera.x) * camera.zoom + width/2,
+    y: (wy - camera.y) * camera.zoom + height/2
+  };
+}
 
-  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 4000);
-  camera.position.set(120, 60, 120);
+function screenToWorld(sx, sy) {
+  return {
+    x: (sx - width/2) / camera.zoom + camera.x,
+    y: (sy - height/2) / camera.zoom + camera.y
+  };
+}
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('three-canvas') });
-  renderer.setSize(innerWidth, innerHeight);
-  renderer.setPixelRatio(devicePixelRatio);
+// ────────────────────────────────────────────────
+function draw() {
+  ctx.fillStyle = '#0a1f0a';
+  ctx.fillRect(0, 0, width, height);
 
-  function resize3D() {
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-  }
-  window.addEventListener('resize', resize3D);
-  resize3D();
+  // Grid
+  ctx.strokeStyle = 'rgba(100,180,100,0.25)';
+  ctx.lineWidth = 1;
 
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.rotateSpeed = 0.8;
-  controls.zoomSpeed = 1.2;
-  controls.panSpeed = 0.8;
-  controls.minDistance = 20;
-  controls.maxDistance = 800;
-  controls.maxPolarAngle = Math.PI / 2;
-  controls.target.set(0, 0, 0);
-  controls.update();
+  const left   = screenToWorld(0, 0).x;
+  const right  = screenToWorld(width, 0).x;
+  const top    = screenToWorld(0, 0).y;
+  const bottom = screenToWorld(0, height).y;
 
-  // ─── Yard Variables ────────────────────────────────────────────
-  const oddCols = [];
-  for (let n = 9; n <= 39; n += 2) oddCols.push(n);
-  const cellWidth = 30;
-  const cellDepth = 10;
+  const startX = Math.floor(left / TILE_SIZE) * TILE_SIZE;
+  const startY = Math.floor(top  / TILE_SIZE) * TILE_SIZE;
 
-  let block3DObjects = {};
+  for (let wx = startX; wx < right + TILE_SIZE; wx += TILE_SIZE) {
+    for (let wy = startY; wy < bottom + TILE_SIZE; wy += TILE_SIZE) {
+      const tx = Math.floor(wx / TILE_SIZE);
+      const ty = Math.floor(wy / TILE_SIZE);
 
-  function update3DFrom2D() {
-    // Remove all old block groups
-    Object.values(block3DObjects).forEach(obj => {
-      if (obj.group) scene.remove(obj.group);
-    });
-    block3DObjects = {};
-
-    const loader = new FontLoader();
-    loader.load('https://cdn.jsdelivr.net/npm/three@0.170.0/examples/fonts/helvetiker_regular.typeface.json', font => {
-      const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-      yardBlocks.forEach(block => {
-        const blockGroup = new THREE.Group();
-
-        const planeGeo = new THREE.PlaneGeometry(block.columns * cellWidth, block.rows * cellDepth);
-        const planeMat = new THREE.MeshBasicMaterial({ color: 0x555577, side: THREE.DoubleSide });
-        const plane = new THREE.Mesh(planeGeo, planeMat);
-        plane.rotation.x = -Math.PI / 2;
-        plane.position.y = -0.01;
-        blockGroup.add(plane);
-
-        const labels = [];
-
-        for (let i = 0; i < block.columns; i += 2) {
-          const num = 9 + i * 2;
-          if (num > 39) break;
-          const textGeo = new TextGeometry(num.toString(), { font, size: 6, depth: 0.5 });
-          const mesh = new THREE.Mesh(textGeo, textMat);
-          const cellCenterX = -(block.columns * cellWidth / 2) + (i + 0.5) * cellWidth;
-          mesh.position.set(cellCenterX, 0.2, -(block.rows * cellDepth / 2) - 18);
-          mesh.rotation.x = -Math.PI / 2;
-          blockGroup.add(mesh);
-          labels.push(mesh);
-        }
-
-        'ABCDEFG'.slice(0, block.rows).split('').forEach((letter, idx) => {
-          const textGeo = new TextGeometry(letter, { font, size: 8, depth: 0.6 });
-          const mesh = new THREE.Mesh(textGeo, textMat);
-          const cellCenterZ = -(block.rows * cellDepth / 2) + (idx + 0.5) * cellDepth;
-          mesh.position.set(-(block.columns * cellWidth / 2) - 30, 0.2, cellCenterZ);
-          mesh.rotation.x = -Math.PI / 2;
-          blockGroup.add(mesh);
-          labels.push(mesh);
-        });
-
-        const titleGeo = new TextGeometry(`${block.name} BLOCK`, { font, size: 18, depth: 1.8 });
-        const title = new THREE.Mesh(titleGeo, new THREE.MeshBasicMaterial({ color: 0xffff88 }));
-        title.position.set(0, 30, -(block.rows * cellDepth / 2) - 60);
-        title.rotation.x = -Math.PI / 2;
-        blockGroup.add(title);
-        labels.push(title);
-
-        blockGroup.position.set(block.x * cellWidth, 0, block.y * cellDepth);
-        blockGroup.rotation.y = block.rotation * Math.PI / 180;
-
-        scene.add(blockGroup);
-        block3DObjects[block.id] = { group: blockGroup, plane, labels };
-      });
-    });
-  }
-
-  update3DFrom2D();
-
-  // ─── 2D Yard Layout ────────────────────────────────────────────
-  const twoDPage = document.getElementById('two-d-page');
-  const twoDCanvas = document.getElementById('two-d-canvas');
-  const twoDCtx = twoDCanvas.getContext('2d');
-
-  function resize2DCanvas() {
-    twoDCanvas.width = window.innerWidth;
-    twoDCanvas.height = window.innerHeight;
-  }
-  window.addEventListener('resize', resize2DCanvas);
-  resize2DCanvas();
-
-  let yardBlocks = [
-    {
-      id: 1,
-      name: 'Y',
-      x: 0,
-      y: 0,
-      z: 0,
-      columns: 16,
-      rows: 7,
-      color: 'rgba(100, 150, 255, 0.5)',
-      rotation: 0
-    }
-  ];
-
-  let selectedBlock = null;
-  let isDragging = false;
-  let dragOffsetX = 0;
-  let dragOffsetY = 0;
-
-  let camera2D = { x: 0, y: 0, zoom: 1 };
-
-  const WORLD_SCALE = 20;
-
-  function draw2DYard() {
-    twoDCtx.clearRect(0, 0, twoDCanvas.width, twoDCanvas.height);
-    twoDCtx.fillStyle = '#88aaff';
-    twoDCtx.fillRect(0, 0, twoDCanvas.width, twoDCanvas.height);
-
-    twoDCtx.save();
-    twoDCtx.translate(twoDCanvas.width / 2 + camera2D.x, twoDCanvas.height / 2 + camera2D.y);
-    twoDCtx.scale(camera2D.zoom, camera2D.zoom);
-
-    yardBlocks.forEach(block => {
-      twoDCtx.save();
-      twoDCtx.translate(block.x * WORLD_SCALE, block.y * WORLD_SCALE);
-      twoDCtx.rotate(block.rotation * Math.PI / 180);
-
-      twoDCtx.fillStyle = block.color;
-      twoDCtx.fillRect(-block.columns * WORLD_SCALE / 2, -block.rows * WORLD_SCALE / 2,
-                       block.columns * WORLD_SCALE, block.rows * WORLD_SCALE);
-
-      twoDCtx.strokeStyle = '#000';
-      twoDCtx.lineWidth = 3;
-      twoDCtx.strokeRect(-block.columns * WORLD_SCALE / 2, -block.rows * WORLD_SCALE / 2,
-                         block.columns * WORLD_SCALE, block.rows * WORLD_SCALE);
-
-      twoDCtx.fillStyle = 'white';
-      twoDCtx.font = 'bold 24px Arial';
-      twoDCtx.textAlign = 'center';
-      twoDCtx.textBaseline = 'middle';
-      twoDCtx.fillText(block.name + ' Block', 0, 0);
-
-      twoDCtx.strokeStyle = '#aaccff';
-      twoDCtx.lineWidth = 1;
-      for (let i = 1; i < block.columns; i++) {
-        const x = -block.columns * WORLD_SCALE / 2 + i * WORLD_SCALE;
-        twoDCtx.beginPath();
-        twoDCtx.moveTo(x, -block.rows * WORLD_SCALE / 2);
-        twoDCtx.lineTo(x, block.rows * WORLD_SCALE / 2);
-        twoDCtx.stroke();
-      }
-      for (let i = 1; i < block.rows; i++) {
-        const y = -block.rows * WORLD_SCALE / 2 + i * WORLD_SCALE;
-        twoDCtx.beginPath();
-        twoDCtx.moveTo(-block.columns * WORLD_SCALE / 2, y);
-        twoDCtx.lineTo(block.columns * WORLD_SCALE / 2, y);
-        twoDCtx.stroke();
+      // Simple procedural coloring
+      let color;
+      if (tx < 0 || ty < 0 || tx >= MAP_WIDTH_TILES || ty >= MAP_HEIGHT_TILES) {
+        color = '#1a2a1a'; // out of bounds
+      } else {
+        const hash = (tx * 374761393 + ty * 668265263) | 0;
+        const r = 90 + (hash % 40);
+        const g = 140 + ((hash >> 8) % 50);
+        const b = 80 + ((hash >> 16) % 40);
+        color = `rgb(${r},${g},${b})`;
       }
 
-      twoDCtx.restore();
-    });
+      const s = worldToScreen(wx, wy);
+      ctx.fillStyle = color;
+      ctx.fillRect(s.x, s.y, TILE_SIZE * camera.zoom + 1, TILE_SIZE * camera.zoom + 1);
 
-    twoDCtx.restore();
+      // optional grid lines
+      ctx.strokeRect(s.x, s.y, TILE_SIZE * camera.zoom, TILE_SIZE * camera.zoom);
+    }
   }
 
-  // ─── Mouse Controls ────────────────────────────────────────────
-  twoDCanvas.addEventListener('wheel', e => {
-    e.preventDefault();
-    const rect = twoDCanvas.getBoundingClientRect();
-    const mouseScreenX = e.clientX - rect.left;
-    const mouseScreenY = e.clientY - rect.top;
+  // Optional: draw origin cross
+  const o = worldToScreen(0, 0);
+  ctx.strokeStyle = 'rgba(255,80,80,0.7)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(o.x - 20, o.y);
+  ctx.lineTo(o.x + 20, o.y);
+  ctx.moveTo(o.x, o.y - 20);
+  ctx.lineTo(o.x, o.y + 20);
+  ctx.stroke();
+}
 
-    const preZoomX = mouseScreenX - twoDCanvas.width / 2 - camera2D.x;
-    const preZoomY = mouseScreenY - twoDCanvas.height / 2 - camera2D.y;
+// ────────────────────────────────────────────────
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
 
-    const zoomFactor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    const oldZoom = camera2D.zoom;
-    camera2D.zoom *= zoomFactor;
+  const before = screenToWorld(e.offsetX, e.offsetY);
 
-    camera2D.x = mouseScreenX - twoDCanvas.width / 2 - preZoomX * (camera2D.zoom / oldZoom);
-    camera2D.y = mouseScreenY - twoDCanvas.height / 2 - preZoomY * (camera2D.zoom / oldZoom);
+  // zoom
+  const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+  camera.zoom = Math.max(camera.zoomMin, Math.min(camera.zoomMax, camera.zoom * factor));
 
-    draw2DYard();
-  });
+  const after = screenToWorld(e.offsetX, e.offsetY);
 
-  let isPanning = false;
-  let panStartX = 0, panStartY = 0;
+  // keep cursor point fixed
+  camera.x += before.x - after.x;
+  camera.y += before.y - after.y;
 
-  twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button === 1) {
-      isPanning = true;
-      panStartX = e.clientX - camera2D.x;
-      panStartY = e.clientY - camera2D.y;
-      twoDCanvas.style.cursor = 'grabbing';
-      e.preventDefault();
-    }
-  });
-
-  twoDCanvas.addEventListener('mousemove', e => {
-    if (isPanning) {
-      camera2D.x = e.clientX - panStartX;
-      camera2D.y = e.clientY - panStartY;
-      draw2DYard();
-    }
-  });
-
-  twoDCanvas.addEventListener('mouseup', e => {
-    if (e.button === 1) {
-      isPanning = false;
-      twoDCanvas.style.cursor = 'default';
-    }
-  });
-
-  // ─── Block Dragging ────────────────────────────────────────────
-  twoDCanvas.addEventListener('mousedown', e => {
-    if (e.button !== 0) return;
-
-    const rect = twoDCanvas.getBoundingClientRect();
-    const mouseScreenX = e.clientX - rect.left;
-    const mouseScreenY = e.clientY - rect.top;
-
-    const centerX = mouseScreenX - twoDCanvas.width / 2;
-    const centerY = mouseScreenY - twoDCanvas.height / 2;
-
-    const worldX = (centerX - camera2D.x) / camera2D.zoom;
-    const worldY = (centerY - camera2D.y) / camera2D.zoom;
-
-    selectedBlock = null;
-    for (let i = yardBlocks.length - 1; i >= 0; i--) {
-      const b = yardBlocks[i];
-      const halfW = b.columns * (WORLD_SCALE / 2);
-      const halfH = b.rows * (WORLD_SCALE / 2);
-
-      if (worldX >= b.x - halfW && worldX <= b.x + halfW &&
-          worldY >= b.y - halfH && worldY <= b.y + halfH) {
-        selectedBlock = b;
-        isDragging = true;
-        dragOffsetX = worldX - b.x;
-        dragOffsetY = worldY - b.y;
-        break;
-      }
-    }
-  });
-
-  twoDCanvas.addEventListener('mousemove', e => {
-    if (!isDragging || !selectedBlock) return;
-
-    const rect = twoDCanvas.getBoundingClientRect();
-    const mouseScreenX = e.clientX - rect.left;
-    const mouseScreenY = e.clientY - rect.top;
-
-    const centerX = mouseScreenX - twoDCanvas.width / 2;
-    const centerY = mouseScreenY - twoDCanvas.height / 2;
-
-    const worldX = (centerX - camera2D.x) / camera2D.zoom;
-    const worldY = (centerY - camera2D.y) / camera2D.zoom;
-
-    selectedBlock.x = worldX - dragOffsetX;
-    selectedBlock.y = worldY - dragOffsetY;
-
-    draw2DYard();
-  });
-
-  twoDCanvas.addEventListener('mouseup', () => {
-    isDragging = false;
-    selectedBlock = null;
-  });
-
-  // ─── Right-click Delete/Rotate ─────────────────────────────────
-  twoDCanvas.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    const rect = twoDCanvas.getBoundingClientRect();
-    const mouseScreenX = e.clientX - rect.left;
-    const mouseScreenY = e.clientY - rect.top;
-
-    const centerX = mouseScreenX - twoDCanvas.width / 2;
-    const centerY = mouseScreenY - twoDCanvas.height / 2;
-
-    const worldX = (centerX - camera2D.x) / camera2D.zoom;
-    const worldY = (centerY - camera2D.y) / camera2D.zoom;
-
-    let clickedBlock = null;
-    for (let i = yardBlocks.length - 1; i >= 0; i--) {
-      const b = yardBlocks[i];
-      const halfW = b.columns * (WORLD_SCALE / 2);
-      const halfH = b.rows * (WORLD_SCALE / 2);
-      if (worldX >= b.x - halfW && worldX <= b.x + halfW &&
-          worldY >= b.y - halfH && worldY <= b.y + halfH) {
-        clickedBlock = b;
-        break;
-      }
-    }
-
-    if (clickedBlock) {
-      const action = prompt(`"${clickedBlock.name} Block":\n1 = Delete\n2 = Rotate 90°\nEnter number:`);
-      if (action === '1') {
-        yardBlocks = yardBlocks.filter(b => b !== clickedBlock);
-        draw2DYard();
-      } else if (action === '2') {
-        const temp = clickedBlock.columns;
-        clickedBlock.columns = clickedBlock.rows;
-        clickedBlock.rows = temp;
-        clickedBlock.rotation = (clickedBlock.rotation + 90) % 360;
-        draw2DYard();
-      }
-    }
-  });
-
-  // ─── Save Layout ───────────────────────────────────────────────
-  document.getElementById('save-layout-button').addEventListener('click', () => {
-    update3DFrom2D();
-    alert('Layout saved! 3D view updated with separate blocks.');
-  });
-
-  // ─── Add New Block ─────────────────────────────────────────────
-  document.getElementById('add-block-button').addEventListener('click', () => {
-    const name = prompt('Block name (e.g. X, Z):', 'NewBlock');
-    if (!name) return;
-
-    const columns = parseInt(prompt('Number of columns (bays wide):', '16'));
-    const rows = parseInt(prompt('Number of rows (depth):', '7'));
-    if (isNaN(columns) || isNaN(rows) || columns <= 0 || rows <= 0) {
-      alert('Invalid numbers');
-      return;
-    }
-
-    yardBlocks.push({
-      id: yardBlocks.length + 1,
-      name,
-      x: 0,
-      y: 0,
-      z: 0,
-      columns,
-      rows,
-      color: `rgba(${Math.random()*150+100}, ${Math.random()*150+100}, ${Math.random()*150+100}, 0.5)`,
-      rotation: 0
-    });
-
-    draw2DYard();
-  });
-
-  // ─── Paste Excel Modal ─────────────────────────────────────────
-  const pasteButton = document.getElementById('paste-button');
-  const pasteModal = document.getElementById('paste-modal');
-  const closeModal = document.getElementById('close-modal');
-  const submitPaste = document.getElementById('submit-paste');
-
-  pasteButton.addEventListener('click', () => {
-    pasteModal.style.display = 'block';
-  });
-
-  closeModal.addEventListener('click', () => {
-    pasteModal.style.display = 'none';
-  });
-
- submitPaste.addEventListener('click', () => {
-  const data = document.getElementById('paste-textarea').value.trim();
-  if (!data) return;
-
-  const lines = data.split('\n').map(l => l.trim()).filter(l => l);
-  let start = 0;
-  if (lines[0]?.toLowerCase().includes('container')) start = 1;
-
-  let placedCount = 0;
-
-  for (let i = start; i < lines.length; i++) {
-    const cols = lines[i].split('\t');
-    if (cols.length < 4) continue;
-
-    const [containerNum = '', voyage = '', dischargePort = '', locationRaw = '', group = ''] = cols.map(s => s.trim());
-
-    // Parse with optional block prefix
-    // Examples it handles:
-    //   NewBlock 15C 3
-    //   X 5D 2
-    //   39G 1           ← no prefix → defaults to 'Y'
-    const locMatch = locationRaw.match(/^([A-Za-z0-9]+)?\s*([0-9]+)\s*([A-Ga-g])\s*([0-9]+)$/i);
-    if (!locMatch) {
-      console.warn(`Invalid location format: "${locationRaw}"`);
-      continue;
-    }
-
-    const blockName = (locMatch[1] || 'Y').toUpperCase();
-    const rawBay   = parseInt(locMatch[2]);
-    const rowLetter = locMatch[3].toUpperCase();
-    const stackLvl  = parseInt(locMatch[4]) || 1;
-
-    if (rawBay < 9 || rawBay > 39 || rawBay % 2 !== 1) {
-      console.warn(`Invalid bay number: ${rawBay}`);
-      continue;
-    }
-
-    const bayIndex = (rawBay - 9) / 2;
-    const rowIndex = 'ABCDEFG'.indexOf(rowLetter);
-
-    if (bayIndex < 0 || rowIndex === -1 || stackLvl < 1) {
-      console.warn(`Out of bounds: bay=${rawBay}, row=${rowLetter}`);
-      continue;
-    }
-
-    // Find the block by name
-    const targetBlock = yardBlocks.find(b => b.name.toUpperCase() === blockName);
-    if (!targetBlock) {
-      console.warn(`Block "${blockName}" not found for container ${containerNum}`);
-      continue;
-    }
-
-    // Get the live 3D group (must have saved layout at least once)
-    const blockObj = block3DObjects[targetBlock.id];
-    if (!blockObj || !blockObj.group) {
-      console.warn(`No 3D group for block "${blockName}" — please save layout first`);
-      continue;
-    }
-
-    const blockGroup = blockObj.group;
-
-    // Local position inside the block
-    const localX = bayIndex * cellWidth - (targetBlock.columns * cellWidth / 2) + cellWidth / 2;
-    const localZ = rowIndex * cellDepth - (targetBlock.rows * cellDepth / 2) + cellDepth / 2;
-
-    // Container size
-    const is40ft = group.toLowerCase().includes('40');
-    const length = is40ft ? 40 : 20;
-    const width  = 10;
-    const height = 8.5;
-
-    const yBase = (stackLvl - 1) * height;
-
-    // Create mesh
-    const geo = new THREE.BoxGeometry(length, height, width);
-    const mat = new THREE.MeshStandardMaterial({
-      color: is40ft ? 0xff8800 : 0x00aaff   // orange=40ft, blue=20ft
-    });
-    const mesh = new THREE.Mesh(geo, mat);
-
-    // Position in **local block space**
-    mesh.position.set(localX, yBase + height / 2, localZ);
-
-    // Add as child → moves/rotates with block
-    blockGroup.add(mesh);
-
-    placedCount++;
-  }
-
-  console.log(`Placed ${placedCount} containers into blocks`);
-  pasteModal.style.display = 'none';
-  document.getElementById('paste-textarea').value = '';
+  draw();
 });
-  // ─── Settings & Navigation ─────────────────────────────────────
-  const settingsButton = document.getElementById('settings-button');
-  const settingsMenu = document.getElementById('settings-menu');
 
-  settingsButton.addEventListener('click', () => {
-    settingsMenu.style.display = settingsMenu.style.display === 'block' ? 'none' : 'block';
-  });
-
-  document.addEventListener('click', e => {
-    if (!settingsButton.contains(e.target) && !settingsMenu.contains(e.target)) {
-      settingsMenu.style.display = 'none';
-    }
-  });
-
-  document.getElementById('yard-layout-button').addEventListener('click', () => {
-    twoDPage.style.display = 'block';
-    draw2DYard();
-    settingsMenu.style.display = 'none';
-  });
-
-  document.getElementById('back-button').addEventListener('click', () => {
-    twoDPage.style.display = 'none';
-  });
-
-  // ─── Animate ───────────────────────────────────────────────────
-  function animate() {
-    requestAnimationFrame(animate);
-    controls.update();
-    renderer.render(scene, camera);
+canvas.addEventListener('mousedown', e => {
+  if (e.button === 2) {           // right click
+    isDragging = true;
+    lastMouse.x = e.clientX;
+    lastMouse.y = e.clientY;
+    canvas.style.cursor = 'grabbing';
   }
-  animate();
+});
+
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+
+  const dx = e.clientX - lastMouse.x;
+  const dy = e.clientY - lastMouse.y;
+
+  camera.x -= dx / camera.zoom;
+  camera.y -= dy / camera.zoom;
+
+  lastMouse.x = e.clientX;
+  lastMouse.y = e.clientY;
+
+  draw();
+});
+
+window.addEventListener('mouseup', e => {
+  if (e.button === 2) {
+    isDragging = false;
+    canvas.style.cursor = 'default';
+  }
+});
+
+window.addEventListener('contextmenu', e => {
+  e.preventDefault(); // stop right-click menu
+});
+
+// ────────────────────────────────────────────────
+draw(); // first draw
+
 </script>
 </body>
 </html>
