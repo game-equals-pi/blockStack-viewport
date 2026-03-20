@@ -1,227 +1,294 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slot Booker • 07:00–17:00</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        body { background: #f8fafc; }
-        .slot-card { transition: all 0.2s; }
-        .slot-card:hover { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
-        .entry { transition: all 0.2s; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Dock Slots • Compact</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+  <style>
+    body { background: #f1f5f9; font-family: system-ui, sans-serif; }
+    .slot-header { cursor: pointer; user-select: none; }
+    .slot-content { max-height: 0; overflow: hidden; transition: max-height 0.25s ease; }
+    .slot-content.open { max-height: 500px; } /* adjust if needed */
+  </style>
 </head>
-<body class="min-h-screen py-8">
-    <div class="max-w-2xl mx-auto px-4">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-slate-800">📅 Dock Booking Slots</h1>
-            <button onclick="resetAll()" 
-                    class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg flex items-center gap-2">
-                <i class="fas fa-undo"></i> Reset All
-            </button>
-        </div>
+<body class="min-h-screen py-6 px-4">
 
-        <div id="slots" class="space-y-6"></div>
+<div class="max-w-3xl mx-auto">
 
-        <div class="mt-8 text-center text-xs text-slate-400">
-            Built exactly to your spec • Max 3 per hour • Fully functional demo • Copy &amp; paste into your index.html
-        </div>
+  <!-- Header + Login -->
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <h1 class="text-2xl font-bold text-slate-800">Dock Booking – 07:00–17:00</h1>
+
+    <div id="auth-area" class="flex items-center gap-3">
+      <span id="current-user" class="text-sm text-slate-600 hidden"></span>
+      <button id="btn-login"    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg">Login</button>
+      <button id="btn-logout"   class="px-4 py-2 bg-slate-300 hover:bg-slate-400 text-slate-800 text-sm rounded-lg hidden">Logout</button>
+      <button id="btn-admin"    class="px-3 py-1.5 bg-violet-700 hover:bg-violet-800 text-white text-xs rounded hidden">Admin</button>
     </div>
+  </div>
 
-    <script>
-        // Tailwind script already loaded via CDN
-        function initTailwind() {
-            // no extra needed
-        }
+  <!-- Admin panel (hidden until admin clicks button) -->
+  <div id="admin-panel" class="hidden bg-violet-100 border border-violet-300 rounded-xl p-5 mb-6">
+    <h3 class="font-semibold text-violet-800 mb-3">Admin – Create Company Account</h3>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <input id="new-username" placeholder="Company username" class="border border-violet-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"/>
+      <input id="new-password" type="password" placeholder="Password" class="border border-violet-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"/>
+      <button id="btn-create-user" class="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 text-sm font-medium">Create</button>
+    </div>
+    <p id="admin-msg" class="mt-2 text-sm text-violet-700 min-h-[1.25rem]"></p>
+  </div>
 
-        const hours = Array.from({length: 11}, (_, i) => {
-            const h = 7 + i;
-            return `${h.toString().padStart(2, '0')}:00`;
-        });
+  <!-- Main slots list -->
+  <div id="slots-list" class="space-y-3"></div>
 
-        let slotsData = hours.map(time => ({
-            time: time,
-            count: 0,
-            max: 3,
-            bookings: []
-        }));
+</div>
 
-        function createSlotElement(slot, index) {
-            const div = document.createElement('div');
-            div.className = `slot-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm`;
-            div.dataset.index = index;
+<script>
+// ────────────────────────────────────────────────
+const HOURS = Array.from({length:11}, (_,i)=> `${7+i}`.padStart(2,'0') + ":00");
+const MAX_PER_SLOT = 3;
+const STORAGE_KEY = "dock_bookings_v1";
 
-            div.innerHTML = `
-                <div class="flex justify-between items-center mb-4">
-                    <div class="flex items-center gap-3">
-                        <i class="fas fa-clock text-2xl text-indigo-500"></i>
-                        <h3 class="text-xl font-semibold text-slate-800">${slot.time}</h3>
-                    </div>
-                    <span id="count-${index}" class="font-mono text-lg font-bold px-3 py-1 bg-slate-100 rounded-full text-slate-700">
-                        (0/3)
-                    </span>
-                </div>
+// ─── State ──────────────────────────────────────
+let currentUser = null;
+let isAdmin = false;
+let users = {};         // { username: { password, isAdmin?, bookings } }
+let bookings = {};      // username → { "09:00": [{container,truck}, ...], ... }
 
-                <!-- Bookings list -->
-                <div id="bookings-${index}" class="space-y-3 min-h-[60px]"></div>
+// ─── Load from localStorage ─────────────────────
+function loadData() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw) {
+    const data = JSON.parse(raw);
+    users   = data.users   || {};
+    bookings = data.bookings || {};
+  }
+  // Ensure default admin if none exists
+  if (!users["admin"]) {
+    users["admin"] = { password: "admin123", isAdmin: true };
+  }
+}
 
-                <!-- Add section -->
-                <div id="add-section-${index}" class="mt-4">
-                    <button id="add-btn-${index}"
-                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 shadow-md">
-                        <i class="fas fa-plus"></i> ADD BOOKING
-                    </button>
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ users, bookings }));
+}
 
-                    <!-- Form (drops down) -->
-                    <div id="form-${index}" class="hidden mt-3 border border-dashed border-indigo-300 bg-indigo-50 rounded-xl p-4">
-                        <div class="grid grid-cols-2 gap-3">
-                            <input id="cont-${index}" type="text" placeholder="Container # (e.g. MSCU123456)" 
-                                   class="border border-slate-300 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm">
-                            <input id="truck-${index}" type="text" placeholder="Truck Company (e.g. Maersk Trucking)" 
-                                   class="border border-slate-300 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm">
-                        </div>
-                        <div class="flex gap-2 mt-3">
-                            <button id="save-${index}"
-                                    class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium">
-                                ✅ SAVE
-                            </button>
-                            <button id="cancel-${index}"
-                                    class="flex-1 bg-slate-300 hover:bg-slate-400 py-2 rounded-lg font-medium">
-                                CANCEL
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `;
+// ─── Auth ───────────────────────────────────────
+function updateAuthUI() {
+  const userEl   = document.getElementById("current-user");
+  const btnLogin = document.getElementById("btn-login");
+  const btnLogout= document.getElementById("btn-logout");
+  const btnAdmin = document.getElementById("btn-admin");
+  const adminPnl = document.getElementById("admin-panel");
 
-            // Attach listeners
-            const addBtn = div.querySelector(`#add-btn-${index}`);
-            const form = div.querySelector(`#form-${index}`);
-            const bookingsContainer = div.querySelector(`#bookings-${index}`);
-            const countEl = div.querySelector(`#count-${index}`);
+  if (currentUser) {
+    userEl.textContent = `Logged in as: ${currentUser}`;
+    userEl.classList.remove("hidden");
+    btnLogin.classList.add("hidden");
+    btnLogout.classList.remove("hidden");
+    btnAdmin.classList.toggle("hidden", !isAdmin);
+    adminPnl.classList.add("hidden");
+  } else {
+    userEl.classList.add("hidden");
+    btnLogin.classList.remove("hidden");
+    btnLogout.classList.add("hidden");
+    btnAdmin.classList.add("hidden");
+    adminPnl.classList.add("hidden");
+  }
+}
 
-            function updateUI() {
-                countEl.textContent = `(${slot.count}/${slot.max})`;
-                const shouldShowAdd = slot.count < slot.max;
-                addBtn.style.display = shouldShowAdd ? 'flex' : 'none';
-            }
+document.getElementById("btn-login").onclick = () => {
+  const u = prompt("Username:");
+  const p = prompt("Password:");
+  if (!u || !p) return;
 
-            addBtn.addEventListener('click', () => {
-                form.classList.remove('hidden');
-                addBtn.style.display = 'none';
-                // focus first input
-                div.querySelector(`#cont-${index}`).focus();
-            });
+  if (users[u] && users[u].password === p) {
+    currentUser = u;
+    isAdmin = !!users[u].isAdmin;
+    updateAuthUI();
+    renderSlots();
+  } else {
+    alert("Wrong username or password");
+  }
+};
 
-            div.querySelector(`#save-${index}`).addEventListener('click', () => {
-                const containerVal = div.querySelector(`#cont-${index}`).value.trim();
-                const truckVal = div.querySelector(`#truck-${index}`).value.trim();
+document.getElementById("btn-logout").onclick = () => {
+  currentUser = null;
+  isAdmin = false;
+  updateAuthUI();
+  document.getElementById("slots-list").innerHTML = "";
+};
 
-                if (!containerVal || !truckVal) {
-                    alert("Please fill both fields");
-                    return;
-                }
+document.getElementById("btn-admin").onclick = () => {
+  const pnl = document.getElementById("admin-panel");
+  pnl.classList.toggle("hidden");
+};
 
-                // Add booking
-                slot.bookings.push({
-                    container: containerVal,
-                    truck: truckVal
-                });
-                slot.count++;
+// Create new user (admin only)
+document.getElementById("btn-create-user").onclick = () => {
+  if (!isAdmin) return;
+  const u = document.getElementById("new-username").value.trim();
+  const p = document.getElementById("new-password").value.trim();
+  const msg = document.getElementById("admin-msg");
 
-                // Create nice entry row
-                const entry = document.createElement('div');
-                entry.className = `entry flex justify-between items-center bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm`;
-                entry.innerHTML = `
-                    <div>
-                        <span class="font-mono font-bold text-emerald-600">${containerVal}</span>
-                        <span class="mx-2 text-slate-400">•</span>
-                        <span class="text-slate-600">${truckVal}</span>
-                    </div>
-                    <button class="remove-btn text-red-500 hover:text-red-600 font-bold px-2 py-1">✕</button>
-                `;
+  if (!u || !p) {
+    msg.textContent = "Enter both username and password";
+    msg.className = "text-red-600";
+    return;
+  }
+  if (users[u]) {
+    msg.textContent = "Username already exists";
+    msg.className = "text-red-600";
+    return;
+  }
 
-                // Remove handler
-                entry.querySelector('.remove-btn').addEventListener('click', () => {
-                    const idx = slot.bookings.findIndex(b => b.container === containerVal);
-                    if (idx > -1) slot.bookings.splice(idx, 1);
-                    slot.count--;
-                    bookingsContainer.removeChild(entry);
-                    updateUI();
-                });
+  users[u] = { password: p, isAdmin: false };
+  bookings[u] = {};
+  saveData();
 
-                bookingsContainer.appendChild(entry);
+  msg.textContent = `User "${u}" created successfully`;
+  msg.className = "text-green-600";
+  document.getElementById("new-username").value = "";
+  document.getElementById("new-password").value = "";
+};
 
-                // Reset form & UI
-                div.querySelector(`#cont-${index}`).value = '';
-                div.querySelector(`#truck-${index}`).value = '';
-                form.classList.add('hidden');
-                updateUI();
-            });
+// ─── Render ─────────────────────────────────────
+function getUserBookings() {
+  if (!currentUser) return {};
+  return bookings[currentUser] || (bookings[currentUser] = {});
+}
 
-            div.querySelector(`#cancel-${index}`).addEventListener('click', () => {
-                form.classList.add('hidden');
-                updateUI(); // restores add button if still room
-            });
+function renderSlots() {
+  if (!currentUser) {
+    document.getElementById("slots-list").innerHTML = '<p class="text-center text-slate-500 py-10">Please log in to view bookings</p>';
+    return;
+  }
 
-            // Initial UI state
-            updateUI();
+  const container = document.getElementById("slots-list");
+  container.innerHTML = "";
 
-            return div;
-        }
+  HOURS.forEach(time => {
+    const slotDiv = document.createElement("div");
+    slotDiv.className = "bg-white border border-slate-200 rounded-lg shadow-sm";
 
-        function renderAll() {
-            const container = document.getElementById('slots');
-            container.innerHTML = '';
-            
-            slotsData.forEach((slot, i) => {
-                const el = createSlotElement(slot, i);
-                container.appendChild(el);
-            });
-        }
+    const header = document.createElement("div");
+    header.className = "slot-header flex justify-between items-center px-4 py-3 bg-slate-50 hover:bg-slate-100";
+    header.innerHTML = `
+      <div class="font-medium text-slate-800">${time}</div>
+      <div class="font-mono text-sm text-slate-600" id="count-${time}">(0/${MAX_PER_SLOT})</div>
+    `;
 
-        function resetAll() {
-            if (confirm("Clear everything?")) {
-                slotsData = hours.map(time => ({
-                    time: time,
-                    count: 0,
-                    max: 3,
-                    bookings: []
-                }));
-                renderAll();
-            }
-        }
+    const content = document.createElement("div");
+    content.className = "slot-content px-4 pb-3";
+    content.id = `content-${time}`;
 
-        // Boot
-        window.onload = () => {
-            renderAll();
+    const list = document.createElement("div");
+    list.className = "space-y-2 mt-2";
+    list.id = `list-${time}`;
 
-            // Demo: pre-fill one slot so you can see the flow immediately
-            setTimeout(() => {
-                // Simulate first booking in 09:00 slot (index 2)
-                const demoSlot = slotsData[2];
-                demoSlot.bookings.push({container: "COSU987654", truck: "Linehaul Ltd"});
-                demoSlot.count = 1;
-                
-                // Force re-render of just that slot (for demo)
-                const container = document.getElementById('slots');
-                container.children[2].remove();
-                const newDemoEl = createSlotElement(demoSlot, 2);
-                container.insertBefore(newDemoEl, container.children[2]);
-                
-                console.log('%c✅ Demo loaded – click any + button to test!', 'color:#10b981; font-weight:bold');
-            }, 800);
-        };
+    const addBtn = document.createElement("button");
+    addBtn.className = "mt-3 w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 rounded-lg flex items-center justify-center gap-2";
+    addBtn.innerHTML = '<i class="fas fa-plus text-xs"></i> Add';
+    addBtn.onclick = () => showForm(time);
 
-        // Bonus: keyboard shortcut to reset (Ctrl/Cmd + Shift + R)
-        document.addEventListener('keydown', e => {
-            if (e.shiftKey && e.key.toLowerCase() === 'r' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                resetAll();
-            }
-        });
-    </script>
+    const form = document.createElement("div");
+    form.className = "hidden mt-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3";
+    form.innerHTML = `
+      <div class="grid grid-cols-2 gap-2 mb-2">
+        <input id="cont-${time}"  placeholder="Container #" class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"/>
+        <input id="truck-${time}" placeholder="Truck Co."  class="border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"/>
+      </div>
+      <div class="flex gap-2">
+        <button class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-1.5 rounded" onclick="saveBooking('${time}')">Save</button>
+        <button class="flex-1 bg-slate-300 hover:bg-slate-400 text-sm py-1.5 rounded" onclick="cancelForm('${time}')">Cancel</button>
+      </div>
+    `;
+
+    content.appendChild(list);
+    content.appendChild(addBtn);
+    content.appendChild(form);
+
+    slotDiv.appendChild(header);
+    slotDiv.appendChild(content);
+    container.appendChild(slotDiv);
+
+    // Toggle expand/collapse
+    header.onclick = () => {
+      content.classList.toggle("open");
+    };
+
+    // Initial render of this slot
+    refreshSlot(time);
+  });
+}
+
+function refreshSlot(time) {
+  const userBookings = getUserBookings();
+  const slotBookings = userBookings[time] || (userBookings[time] = []);
+  const countEl = document.getElementById(`count-${time}`);
+  const listEl  = document.getElementById(`list-${time}`);
+  const addBtn  = document.querySelector(`#content-${time} button`);
+
+  countEl.textContent = `(${slotBookings.length}/${MAX_PER_SLOT})`;
+  listEl.innerHTML = "";
+
+  slotBookings.forEach((b, idx) => {
+    const row = document.createElement("div");
+    row.className = "flex justify-between items-center bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm";
+    row.innerHTML = `
+      <div>
+        <span class="font-mono text-emerald-700">${b.container}</span>
+        <span class="mx-2 text-slate-400">•</span>
+        <span class="text-slate-600">${b.truck}</span>
+      </div>
+      <button class="text-red-500 hover:text-red-700 text-xs font-bold" onclick="removeBooking('${time}', ${idx})">×</button>
+    `;
+    listEl.appendChild(row);
+  });
+
+  addBtn.style.display = slotBookings.length < MAX_PER_SLOT ? "flex" : "none";
+}
+
+window.saveBooking = function(time) {
+  const cont  = document.getElementById(`cont-${time}`).value.trim();
+  const truck = document.getElementById(`truck-${time}`).value.trim();
+  if (!cont || !truck) return alert("Fill both fields");
+
+  const userBookings = getUserBookings();
+  const slot = userBookings[time] || (userBookings[time] = []);
+  slot.push({ container: cont, truck });
+  saveData();
+  refreshSlot(time);
+  cancelForm(time);
+};
+
+window.cancelForm = function(time) {
+  document.getElementById(`cont-${time}`).value = "";
+  document.getElementById(`truck-${time}`).value = "";
+  const form = document.querySelector(`#content-${time} .bg-indigo-50`);
+  form.classList.add("hidden");
+};
+
+window.removeBooking = function(time, idx) {
+  const userBookings = getUserBookings();
+  const slot = userBookings[time] || [];
+  slot.splice(idx, 1);
+  saveData();
+  refreshSlot(time);
+};
+
+function showForm(time) {
+  const form = document.querySelector(`#content-${time} .bg-indigo-50`);
+  form.classList.remove("hidden");
+  document.getElementById(`cont-${time}`).focus();
+}
+
+// ─── Init ───────────────────────────────────────
+loadData();
+updateAuthUI();
+// renderSlots() called after successful login
+</script>
 </body>
 </html>
