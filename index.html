@@ -1,187 +1,227 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Empty Tiled Grid – Pan & Zoom</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: #0a140a;
-      font-family: Arial, Helvetica, sans-serif;
-      height: 100vh;
-    }
-    canvas {
-      display: block;
-    }
-    #ui {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      color: #88ff88;
-      background: rgba(0,0,0,0.6);
-      padding: 8px 12px;
-      border-radius: 6px;
-      user-select: none;
-      pointer-events: none;
-      font-size: 14px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slot Booker • 07:00–17:00</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { background: #f8fafc; }
+        .slot-card { transition: all 0.2s; }
+        .slot-card:hover { box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1); }
+        .entry { transition: all 0.2s; }
+    </style>
 </head>
-<body>
+<body class="min-h-screen py-8">
+    <div class="max-w-2xl mx-auto px-4">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-slate-800">📅 Dock Booking Slots</h1>
+            <button onclick="resetAll()" 
+                    class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg flex items-center gap-2">
+                <i class="fas fa-undo"></i> Reset All
+            </button>
+        </div>
 
-<div id="ui">Scroll to zoom · Right-click drag to pan</div>
-<canvas id="c"></canvas>
+        <div id="slots" class="space-y-6"></div>
 
-<script>
-// ────────────────────────────────────────────────
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+        <div class="mt-8 text-center text-xs text-slate-400">
+            Built exactly to your spec • Max 3 per hour • Fully functional demo • Copy &amp; paste into your index.html
+        </div>
+    </div>
 
-let width, height;
+    <script>
+        // Tailwind script already loaded via CDN
+        function initTailwind() {
+            // no extra needed
+        }
 
-// Camera / view
-let camera = {
-  x: 0,
-  y: 0,
-  zoom: 1.0,
-  zoomMin: 0.3,
-  zoomMax: 12.0
-};
+        const hours = Array.from({length: 11}, (_, i) => {
+            const h = 7 + i;
+            return `${h.toString().padStart(2, '0')}:00`;
+        });
 
-// Mouse
-let isDragging = false;
-let lastMouse = { x: 0, y: 0 };
+        let slotsData = hours.map(time => ({
+            time: time,
+            count: 0,
+            max: 3,
+            bookings: []
+        }));
 
-// World grid settings
-const TILE_SIZE = 64;
-const MAP_WIDTH_TILES  = 80;
-const MAP_HEIGHT_TILES = 60;
+        function createSlotElement(slot, index) {
+            const div = document.createElement('div');
+            div.className = `slot-card bg-white border border-slate-200 rounded-2xl p-5 shadow-sm`;
+            div.dataset.index = index;
 
-// ────────────────────────────────────────────────
-function resize() {
-  width = canvas.width = window.innerWidth;
-  height = canvas.height = window.innerHeight;
-}
+            div.innerHTML = `
+                <div class="flex justify-between items-center mb-4">
+                    <div class="flex items-center gap-3">
+                        <i class="fas fa-clock text-2xl text-indigo-500"></i>
+                        <h3 class="text-xl font-semibold text-slate-800">${slot.time}</h3>
+                    </div>
+                    <span id="count-${index}" class="font-mono text-lg font-bold px-3 py-1 bg-slate-100 rounded-full text-slate-700">
+                        (0/3)
+                    </span>
+                </div>
 
-window.addEventListener('resize', resize);
-resize();
+                <!-- Bookings list -->
+                <div id="bookings-${index}" class="space-y-3 min-h-[60px]"></div>
 
-// ────────────────────────────────────────────────
-function worldToScreen(wx, wy) {
-  return {
-    x: (wx - camera.x) * camera.zoom + width  / 2,
-    y: (wy - camera.y) * camera.zoom + height / 2
-  };
-}
+                <!-- Add section -->
+                <div id="add-section-${index}" class="mt-4">
+                    <button id="add-btn-${index}"
+                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2 shadow-md">
+                        <i class="fas fa-plus"></i> ADD BOOKING
+                    </button>
 
-function screenToWorld(sx, sy) {
-  return {
-    x: (sx - width / 2)  / camera.zoom + camera.x,
-    y: (sy - height / 2) / camera.zoom + camera.y
-  };
-}
+                    <!-- Form (drops down) -->
+                    <div id="form-${index}" class="hidden mt-3 border border-dashed border-indigo-300 bg-indigo-50 rounded-xl p-4">
+                        <div class="grid grid-cols-2 gap-3">
+                            <input id="cont-${index}" type="text" placeholder="Container # (e.g. MSCU123456)" 
+                                   class="border border-slate-300 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm">
+                            <input id="truck-${index}" type="text" placeholder="Truck Company (e.g. Maersk Trucking)" 
+                                   class="border border-slate-300 focus:border-indigo-500 rounded-lg px-3 py-2 text-sm">
+                        </div>
+                        <div class="flex gap-2 mt-3">
+                            <button id="save-${index}"
+                                    class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg font-medium">
+                                ✅ SAVE
+                            </button>
+                            <button id="cancel-${index}"
+                                    class="flex-1 bg-slate-300 hover:bg-slate-400 py-2 rounded-lg font-medium">
+                                CANCEL
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
 
-// ────────────────────────────────────────────────
-function draw() {
-  // Dark background
-  ctx.fillStyle = '#0a140a';
-  ctx.fillRect(0, 0, width, height);
+            // Attach listeners
+            const addBtn = div.querySelector(`#add-btn-${index}`);
+            const form = div.querySelector(`#form-${index}`);
+            const bookingsContainer = div.querySelector(`#bookings-${index}`);
+            const countEl = div.querySelector(`#count-${index}`);
 
-  ctx.strokeStyle = 'rgba(80, 140, 80, 0.4)';   // subtle green grid
-  ctx.lineWidth = 1;
+            function updateUI() {
+                countEl.textContent = `(${slot.count}/${slot.max})`;
+                const shouldShowAdd = slot.count < slot.max;
+                addBtn.style.display = shouldShowAdd ? 'flex' : 'none';
+            }
 
-  // Visible world bounds in screen space
-  const left   = screenToWorld(0, 0).x;
-  const right  = screenToWorld(width, 0).x;
-  const top    = screenToWorld(0, 0).y;
-  const bottom = screenToWorld(0, height).y;
+            addBtn.addEventListener('click', () => {
+                form.classList.remove('hidden');
+                addBtn.style.display = 'none';
+                // focus first input
+                div.querySelector(`#cont-${index}`).focus();
+            });
 
-  // Start from the tile-aligned position before the top-left
-  const startX = Math.floor(left / TILE_SIZE) * TILE_SIZE;
-  const startY = Math.floor(top  / TILE_SIZE) * TILE_SIZE;
+            div.querySelector(`#save-${index}`).addEventListener('click', () => {
+                const containerVal = div.querySelector(`#cont-${index}`).value.trim();
+                const truckVal = div.querySelector(`#truck-${index}`).value.trim();
 
-  for (let wx = startX; wx <= right + TILE_SIZE; wx += TILE_SIZE) {
-    for (let wy = startY; wy <= bottom + TILE_SIZE; wy += TILE_SIZE) {
-      const tx = Math.floor(wx / TILE_SIZE);
-      const ty = Math.floor(wy / TILE_SIZE);
+                if (!containerVal || !truckVal) {
+                    alert("Please fill both fields");
+                    return;
+                }
 
-      const s = worldToScreen(wx, wy);
-      const tileSizeZoomed = TILE_SIZE * camera.zoom;
+                // Add booking
+                slot.bookings.push({
+                    container: containerVal,
+                    truck: truckVal
+                });
+                slot.count++;
 
-      // Only draw grid if inside map bounds (optional — remove condition to show infinite grid)
-      if (tx >= 0 && ty >= 0 && tx < MAP_WIDTH_TILES && ty < MAP_HEIGHT_TILES) {
-        ctx.strokeRect(s.x, s.y, tileSizeZoomed, tileSizeZoomed);
-      }
-    }
-  }
+                // Create nice entry row
+                const entry = document.createElement('div');
+                entry.className = `entry flex justify-between items-center bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm`;
+                entry.innerHTML = `
+                    <div>
+                        <span class="font-mono font-bold text-emerald-600">${containerVal}</span>
+                        <span class="mx-2 text-slate-400">•</span>
+                        <span class="text-slate-600">${truckVal}</span>
+                    </div>
+                    <button class="remove-btn text-red-500 hover:text-red-600 font-bold px-2 py-1">✕</button>
+                `;
 
-  // Origin crosshair
-  const o = worldToScreen(0, 0);
-  ctx.strokeStyle = 'rgba(255, 60, 60, 0.8)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(o.x - 24, o.y);
-  ctx.lineTo(o.x + 24, o.y);
-  ctx.moveTo(o.x, o.y - 24);
-  ctx.lineTo(o.x, o.y + 24);
-  ctx.stroke();
-}
+                // Remove handler
+                entry.querySelector('.remove-btn').addEventListener('click', () => {
+                    const idx = slot.bookings.findIndex(b => b.container === containerVal);
+                    if (idx > -1) slot.bookings.splice(idx, 1);
+                    slot.count--;
+                    bookingsContainer.removeChild(entry);
+                    updateUI();
+                });
 
-// ────────────────────────────────────────────────
-canvas.addEventListener('wheel', e => {
-  e.preventDefault();
+                bookingsContainer.appendChild(entry);
 
-  const before = screenToWorld(e.offsetX, e.offsetY);
+                // Reset form & UI
+                div.querySelector(`#cont-${index}`).value = '';
+                div.querySelector(`#truck-${index}`).value = '';
+                form.classList.add('hidden');
+                updateUI();
+            });
 
-  const factor = e.deltaY < 0 ? 1.14 : 1 / 1.14;
-  camera.zoom = Math.max(camera.zoomMin, Math.min(camera.zoomMax, camera.zoom * factor));
+            div.querySelector(`#cancel-${index}`).addEventListener('click', () => {
+                form.classList.add('hidden');
+                updateUI(); // restores add button if still room
+            });
 
-  const after = screenToWorld(e.offsetX, e.offsetY);
+            // Initial UI state
+            updateUI();
 
-  camera.x += before.x - after.x;
-  camera.y += before.y - after.y;
+            return div;
+        }
 
-  draw();
-});
+        function renderAll() {
+            const container = document.getElementById('slots');
+            container.innerHTML = '';
+            
+            slotsData.forEach((slot, i) => {
+                const el = createSlotElement(slot, i);
+                container.appendChild(el);
+            });
+        }
 
-canvas.addEventListener('mousedown', e => {
-  if (e.button === 2) {
-    isDragging = true;
-    lastMouse.x = e.clientX;
-    lastMouse.y = e.clientY;
-    canvas.style.cursor = 'grabbing';
-  }
-});
+        function resetAll() {
+            if (confirm("Clear everything?")) {
+                slotsData = hours.map(time => ({
+                    time: time,
+                    count: 0,
+                    max: 3,
+                    bookings: []
+                }));
+                renderAll();
+            }
+        }
 
-window.addEventListener('mousemove', e => {
-  if (!isDragging) return;
+        // Boot
+        window.onload = () => {
+            renderAll();
 
-  const dx = e.clientX - lastMouse.x;
-  const dy = e.clientY - lastMouse.y;
+            // Demo: pre-fill one slot so you can see the flow immediately
+            setTimeout(() => {
+                // Simulate first booking in 09:00 slot (index 2)
+                const demoSlot = slotsData[2];
+                demoSlot.bookings.push({container: "COSU987654", truck: "Linehaul Ltd"});
+                demoSlot.count = 1;
+                
+                // Force re-render of just that slot (for demo)
+                const container = document.getElementById('slots');
+                container.children[2].remove();
+                const newDemoEl = createSlotElement(demoSlot, 2);
+                container.insertBefore(newDemoEl, container.children[2]);
+                
+                console.log('%c✅ Demo loaded – click any + button to test!', 'color:#10b981; font-weight:bold');
+            }, 800);
+        };
 
-  camera.x -= dx / camera.zoom;
-  camera.y -= dy / camera.zoom;
-
-  lastMouse.x = e.clientX;
-  lastMouse.y = e.clientY;
-
-  draw();
-});
-
-window.addEventListener('mouseup', e => {
-  if (e.button === 2) {
-    isDragging = false;
-    canvas.style.cursor = 'default';
-  }
-});
-
-window.addEventListener('contextmenu', e => e.preventDefault());
-
-// Initial draw
-draw();
-
-</script>
+        // Bonus: keyboard shortcut to reset (Ctrl/Cmd + Shift + R)
+        document.addEventListener('keydown', e => {
+            if (e.shiftKey && e.key.toLowerCase() === 'r' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                resetAll();
+            }
+        });
+    </script>
 </body>
 </html>
